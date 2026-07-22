@@ -3,6 +3,8 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const geoip = require('geoip-lite');
 const User = require('../models/User');
+const Session = require('../models/Session');
+const crypto = require('crypto');
 const LoginLog = require('../models/LoginLog');
 const { protect, authorize } = require('../middleware/auth');
 const sendEmail = require('../utils/sendEmail');
@@ -29,31 +31,65 @@ const googleSchema = z.object({
 });
 
 // Generate JWT Helper
-const generateToken = (id) => {
+const generateAccessToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '30d',
+    expiresIn: '5m', // Short-lived Access Token
   });
 };
 
-const sendTokenCookie = (user, statusCode, res) => {
-  const token = generateToken(user._id);
+const sendTokenCookie = async (user, statusCode, res, req) => {
+  const accessToken = generateAccessToken(user._id);
+  const refreshToken = crypto.randomBytes(40).toString('hex');
+  
+  // IP & Geolocation info extraction
+  const rawIp = req?.headers?.['x-forwarded-for'] || req?.ip || req?.connection?.remoteAddress || req?.socket?.remoteAddress || '127.0.0.1';
+  const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+  const userAgent = req?.headers?.['user-agent'] || '';
+  const geo = geoip.lookup(ipAddress);
+  const location = {
+    country: geo?.country || 'Localhost',
+    region: geo?.region || 'Localhost',
+    city: geo?.city || 'Localhost'
+  };
 
-  const cookieOptions = {
+  // Create Session
+  await Session.create({
+    userId: user._id,
+    refreshToken,
+    deviceInfo: { browser: userAgent },
+    ipAddress,
+    location,
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+  });
+
+  const cookieOptionsAccess = {
+    expires: new Date(Date.now() + 5 * 60 * 1000), // 5 mins
+    httpOnly: true,
+    sameSite: 'lax',
+  };
+
+  const cookieOptionsRefresh = {
     expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
     httpOnly: true,
-    sameSite: 'strict',
+    sameSite: 'lax',
   };
 
   if (process.env.NODE_ENV === 'production') {
-    cookieOptions.secure = true;
+    cookieOptionsAccess.secure = true;
+    cookieOptionsRefresh.secure = true;
   }
+
+  // Generate CSRF Token for Double Submit Cookie pattern
+  const csrfToken = crypto.randomBytes(32).toString('hex');
 
   res
     .status(statusCode)
-    .cookie('token', token, cookieOptions)
+    .cookie('accessToken', accessToken, cookieOptionsAccess)
+    .cookie('refreshToken', refreshToken, cookieOptionsRefresh)
+    .cookie('csrfToken', csrfToken, { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' })
     .json({
       success: true,
-      token,
+      csrfToken,
       user: {
         _id: user._id,
         name: user.name,
@@ -121,7 +157,7 @@ router.post('/register', protect, authorize('admin'), async (req, res) => {
         html: emailHtml,
       }).catch((err) => console.error('Error sending welcome email:', err.message));
 
-      sendTokenCookie(user, 201, res);
+      await sendTokenCookie(user, 201, res, req);
     } else {
       res.status(400).json({ success: false, message: 'Invalid user data' });
     }
@@ -193,7 +229,7 @@ router.post('/login', async (req, res) => {
       success: true
     });
 
-    sendTokenCookie(user, 200, res);
+    await sendTokenCookie(user, 200, res, req);
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error during login' });
@@ -263,7 +299,7 @@ router.post('/google', async (req, res) => {
       success: true
     });
 
-    sendTokenCookie(user, 200, res);
+    await sendTokenCookie(user, 200, res, req);
   } catch (error) {
     console.error(error);
     res.status(401).json({ success: false, message: 'Google Authentication failed' });
@@ -337,7 +373,7 @@ router.post('/studentinfo-google', async (req, res) => {
       success: true
     });
 
-    sendTokenCookie(user, 200, res);
+    await sendTokenCookie(user, 200, res, req);
   } catch (error) {
     console.error(error);
     res.status(401).json({ success: false, message: 'Google Authentication failed' });
@@ -371,20 +407,85 @@ router.get('/me', protect, async (req, res) => {
   }
 });
 
-// @desc    Logout user / clear cookie
-// @route   GET /api/auth/logout
-// @access  Private
-router.get('/logout', protect, async (req, res) => {
+// @desc    Refresh Access Token
+// @route   POST /api/auth/refresh
+// @access  Public
+router.post('/refresh', async (req, res) => {
   try {
-    res.cookie('token', 'none', {
-      expires: new Date(Date.now() + 10 * 1000),
-      httpOnly: true,
+    const { refreshToken } = req.cookies;
+    if (!refreshToken) {
+      return res.status(401).json({ success: false, message: 'No refresh token provided' });
+    }
+
+    const session = await Session.findOne({ refreshToken, isRevoked: false });
+    if (!session || session.expiresAt < new Date()) {
+      if (session) {
+        session.isRevoked = true;
+        await session.save();
+      }
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      res.clearCookie('csrfToken');
+      return res.status(401).json({ success: false, message: 'Session expired or invalid' });
+    }
+
+    const user = await User.findById(session.userId);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'User not found' });
+    }
+
+    // Token Rotation
+    const newRefreshToken = crypto.randomBytes(40).toString('hex');
+    session.refreshToken = newRefreshToken;
+    session.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await session.save();
+
+    const newAccessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: '5m', // Short-lived Access Token
     });
-    res.json({ success: true, message: 'Logged out successfully' });
+
+    const cookieOptionsAccess = {
+      expires: new Date(Date.now() + 5 * 60 * 1000),
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
+    };
+    const cookieOptionsRefresh = {
+      expires: session.expiresAt,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
+    };
+    
+    const csrfToken = crypto.randomBytes(32).toString('hex');
+
+    res
+      .status(200)
+      .cookie('accessToken', newAccessToken, cookieOptionsAccess)
+      .cookie('refreshToken', newRefreshToken, cookieOptionsRefresh)
+      .cookie('csrfToken', csrfToken, { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' })
+      .json({ success: true, csrfToken });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: 'Server error during logout' });
+    res.status(500).json({ success: false, message: 'Server error during refresh' });
   }
+});
+
+// @desc    Logout user
+// @route   POST /api/auth/logout
+// @access  Public
+router.post('/logout', async (req, res) => {
+  try {
+    const { refreshToken } = req.cookies;
+    if (refreshToken) {
+      await Session.findOneAndUpdate({ refreshToken }, { isRevoked: true });
+    }
+  } catch(e) {}
+  
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken');
+  res.clearCookie('csrfToken');
+  res.json({ success: true, message: 'Logged out successfully' });
 });
 
 // @desc    Developer Bypass Login (For local development only)
@@ -410,7 +511,7 @@ router.post('/dev-login', async (req, res) => {
       await user.save();
     }
 
-    sendTokenCookie(user, 200, res);
+    await sendTokenCookie(user, 200, res, req);
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Dev login failed' });
