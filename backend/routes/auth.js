@@ -7,8 +7,26 @@ const LoginLog = require('../models/LoginLog');
 const { protect, authorize } = require('../middleware/auth');
 const sendEmail = require('../utils/sendEmail');
 const { OAuth2Client } = require('google-auth-library');
+const { z } = require('zod');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Zod Validation Schemas
+const registerSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  enrollmentNo: z.string().min(3, "Enrollment number is required"),
+  email: z.string().email("Invalid email format").refine(e => e.toLowerCase().endsWith('@swaminarayanuniversity.ac.in'), "Only @swaminarayanuniversity.ac.in addresses are allowed"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+const loginSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(1, "Password is required"),
+});
+
+const googleSchema = z.object({
+  idToken: z.string().min(1, "Please provide Google idToken"),
+});
 
 // Generate JWT Helper
 const generateToken = (id) => {
@@ -52,26 +70,24 @@ const sendTokenCookie = (user, statusCode, res) => {
 // @access  Private (Admin)
 router.post('/register', protect, authorize('admin'), async (req, res) => {
   try {
-    const { name, enrollmentNo, email, password } = req.body;
-
-    if (!name || !enrollmentNo || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide all fields' });
+    // Validate Input with Zod
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
     }
-
-    // Check if email ends with @gmail.com
-    if (!email.toLowerCase().endsWith('@gmail.com')) {
-      return res.status(400).json({ success: false, message: 'Only Gmail addresses (@gmail.com) are allowed to register' });
-    }
+    const { name, enrollmentNo, email, password } = parsed.data;
 
     // Check if user already exists by email or enrollment number
     const userExistsByEmail = await User.findOne({ email });
     if (userExistsByEmail) {
-      return res.status(400).json({ success: false, message: 'Email already registered' });
+      // Account Enumeration Protection: Generic error
+      return res.status(400).json({ success: false, message: 'Registration failed. Data conflicts with existing records.' });
     }
 
     const userExistsByEnrollment = await User.findOne({ enrollmentNo });
     if (userExistsByEnrollment) {
-      return res.status(400).json({ success: false, message: 'Enrollment number already registered' });
+      // Account Enumeration Protection: Generic error
+      return res.status(400).json({ success: false, message: 'Registration failed. Data conflicts with existing records.' });
     }
 
     // Create user (defaults to role: 'student')
@@ -120,11 +136,12 @@ router.post('/register', protect, authorize('admin'), async (req, res) => {
 // @access  Public
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
+    // Validate Input with Zod
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
     }
+    const { email, password } = parsed.data;
 
     // IP & Geolocation info extraction
     const rawIp = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
@@ -188,10 +205,12 @@ router.post('/login', async (req, res) => {
 // @access  Public
 router.post('/google', async (req, res) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) {
-      return res.status(400).json({ success: false, message: 'Please provide Google idToken' });
+    // Validate Input with Zod
+    const parsed = googleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
     }
+    const { idToken } = parsed.data;
 
     // Verify Google Token strictly (NO MOCKS)
     const ticket = await client.verifyIdToken({
@@ -204,7 +223,8 @@ router.post('/google', async (req, res) => {
 
     // Check university domain strictly
     if (!email.toLowerCase().endsWith('@swaminarayanuniversity.ac.in')) {
-      return res.status(403).json({ success: false, message: 'Only @swaminarayanuniversity.ac.in addresses are allowed' });
+      // Account Enumeration Protection: generic message
+      return res.status(403).json({ success: false, message: 'Authentication failed. Only university accounts are allowed.' });
     }
 
     // IP & Geolocation info extraction
