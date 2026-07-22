@@ -341,6 +341,37 @@ router.get('/stats', async (req, res) => {
       ? Number(((totalBookedSeats / totalSeats) * 100).toFixed(1))
       : 0;
 
+    // 2. Historical Trends (Last 7 Days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const bookingTrendsRaw = await Booking.aggregate([
+      { $match: { bookedAt: { $gte: sevenDaysAgo } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$bookedAt" } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    const loginTrendsRaw = await LoginLog.aggregate([
+      { $match: { timestamp: { $gte: sevenDaysAgo } } },
+      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Format trends for frontend (fill in missing days with 0)
+    const trends = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+      const bFound = bookingTrendsRaw.find(x => x._id === dateStr);
+      const lFound = loginTrendsRaw.find(x => x._id === dateStr);
+      trends.push({
+        date: dateStr,
+        bookings: bFound ? bFound.count : 0,
+        logins: lFound ? lFound.count : 0
+      });
+    }
+
     res.json({
       success: true,
       stats: {
@@ -351,11 +382,46 @@ router.get('/stats', async (req, res) => {
         totalAvailableSeats: totalSeats - totalBookedSeats,
         overallBookingPercentage: overallPercentage,
         classrooms: classroomBreakdown,
+        trends
       },
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error retrieving statistics' });
+  }
+});
+
+// @desc    Export bookings as CSV
+// @route   GET /api/admin/export/bookings
+// @access  Private (Admin)
+router.get('/export/bookings', async (req, res) => {
+  try {
+    const bookings = await Booking.find()
+      .populate('studentId', 'name enrollmentNo email')
+      .populate('classroomId', 'name code')
+      .sort({ bookedAt: -1 });
+
+    let csvContent = 'Booking Date,Student Name,Enrollment No,Email,Classroom,Seat Number,IP Address\n';
+
+    bookings.forEach(b => {
+      const date = b.bookedAt ? b.bookedAt.toISOString().split('T')[0] : 'N/A';
+      const studentName = b.studentId ? b.studentId.name : 'Unknown';
+      const enrollmentNo = b.studentId ? b.studentId.enrollmentNo : 'Unknown';
+      const email = b.studentId ? b.studentId.email : 'Unknown';
+      const classroom = b.classroomId ? b.classroomId.name : 'Unknown';
+      const seatNo = b.seatNumber || 'N/A';
+      const ip = b.ipAddress || 'Unknown';
+      
+      // Escape commas by wrapping in quotes
+      csvContent += `"${date}","${studentName}","${enrollmentNo}","${email}","${classroom}","${seatNo}","${ip}"\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="bookings_export.csv"');
+    res.status(200).send(csvContent);
+  } catch (error) {
+    console.error('CSV Export Error:', error);
+    res.status(500).send('Server error exporting data');
   }
 });
 
