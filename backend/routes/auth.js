@@ -52,6 +52,14 @@ const sendTokenCookie = async (user, statusCode, res, req) => {
     city: geo?.city || 'Localhost'
   };
 
+  // Device Fingerprinting & New Device Detection
+  const existingDeviceSession = await Session.findOne({
+    userId: user._id,
+    'deviceInfo.browser': userAgent
+  });
+
+  const isNewDevice = !existingDeviceSession;
+
   // Create Session
   await Session.create({
     userId: user._id,
@@ -61,6 +69,33 @@ const sendTokenCookie = async (user, statusCode, res, req) => {
     location,
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
   });
+
+  // Send New Device Alert Email
+  if (isNewDevice) {
+    try {
+      const emailHtml = `
+        <h2>New Sign-In Detected</h2>
+        <p>Hi ${user.name},</p>
+        <p>We noticed a new login to your SeatOS account from a device we haven't seen recently.</p>
+        <ul>
+          <li><strong>Device/Browser:</strong> ${userAgent || 'Unknown'}</li>
+          <li><strong>IP Address:</strong> ${ipAddress}</li>
+          <li><strong>Location:</strong> ${location.city}, ${location.region}, ${location.country}</li>
+        </ul>
+        <p>If this was you, you can safely ignore this email.</p>
+        <p>If you don't recognize this activity, please contact administration immediately as your Google account may be compromised.</p>
+      `;
+      
+      await sendEmail({
+        email: user.email,
+        subject: 'Security Alert: New Sign-In to SeatOS',
+        html: emailHtml,
+        forceSend: false // Respect DISABLE_EMAIL env var
+      });
+    } catch (err) {
+      console.error('Failed to send new device email alert:', err);
+    }
+  }
 
   const cookieOptionsAccess = {
     expires: new Date(Date.now() + 5 * 60 * 1000), // 5 mins
@@ -257,8 +292,9 @@ router.post('/google', async (req, res) => {
 
     const { email, name, picture } = payload;
 
-    // Check university domain strictly
-    if (!email.toLowerCase().endsWith('@swaminarayanuniversity.ac.in')) {
+    // Check university domain strictly (allow specific admins to bypass)
+    const adminWhitelist = ['zeelkundariya13@gmail.com', 'admin@codinggita.com'];
+    if (!email.toLowerCase().endsWith('@swaminarayanuniversity.ac.in') && !adminWhitelist.includes(email.toLowerCase())) {
       // Account Enumeration Protection: generic message
       return res.status(403).json({ success: false, message: 'Authentication failed. Only university accounts are allowed.' });
     }
@@ -417,12 +453,33 @@ router.post('/refresh', async (req, res) => {
       return res.status(401).json({ success: false, message: 'No refresh token provided' });
     }
 
-    const session = await Session.findOne({ refreshToken, isRevoked: false });
-    if (!session || session.expiresAt < new Date()) {
-      if (session) {
-        session.isRevoked = true;
-        await session.save();
-      }
+    // Find session by current or used refresh token
+    const session = await Session.findOne({ 
+      $or: [{ refreshToken }, { usedRefreshTokens: refreshToken }] 
+    });
+
+    if (!session) {
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      res.clearCookie('csrfToken');
+      return res.status(401).json({ success: false, message: 'Invalid refresh token' });
+    }
+
+    // Token Reuse Detection
+    if (session.usedRefreshTokens.includes(refreshToken)) {
+      console.warn(`[SECURITY ALERT] Token reuse detected for User ${session.userId}. Revoking session.`);
+      session.isRevoked = true;
+      await session.save();
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      res.clearCookie('csrfToken');
+      return res.status(401).json({ success: false, message: 'Token reuse detected. Session revoked.' });
+    }
+
+    // Normal expiration check
+    if (session.isRevoked || session.expiresAt < new Date()) {
+      session.isRevoked = true;
+      await session.save();
       res.clearCookie('accessToken');
       res.clearCookie('refreshToken');
       res.clearCookie('csrfToken');
@@ -436,6 +493,7 @@ router.post('/refresh', async (req, res) => {
 
     // Token Rotation
     const newRefreshToken = crypto.randomBytes(40).toString('hex');
+    session.usedRefreshTokens.push(refreshToken); // Mark old token as used
     session.refreshToken = newRefreshToken;
     session.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     await session.save();

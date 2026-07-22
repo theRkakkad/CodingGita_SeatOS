@@ -10,6 +10,9 @@ const SessionSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  usedRefreshTokens: [{
+    type: String
+  }],
   deviceInfo: {
     deviceId: { type: String },
     browser: { type: String },

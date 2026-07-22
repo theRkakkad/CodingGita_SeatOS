@@ -32,11 +32,33 @@ const server = http.createServer(app);
 // Trust proxy for retrieving correct client IPs
 app.set('trust proxy', true);
 
-// Set secure headers
-app.use(helmet());
+// Set secure headers with Helmet (Customized to avoid breaking OAuth)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginOpenerPolicy: false, // Completely disable to fix Google popup issues
+  referrerPolicy: { policy: "no-referrer-when-downgrade" }, // Fixes Google SDK origin issues
+  contentSecurityPolicy: false, // We're using CORS instead of CSP for an API
+}));
 
 // Cookie parser middleware
 app.use(cookieParser());
+
+// Rate Limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // Limit each IP to 200 requests per `window`
+  standardHeaders: true, 
+  legacyHeaders: false, 
+  message: { success: false, message: 'Too many requests from this IP, please try again after 15 minutes' }
+});
+
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // Limit each IP to 10 auth requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts from this IP, please try again after a minute' }
+});
 
 // Allowed frontend origins
 const allowedOrigins = [
@@ -123,13 +145,13 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Mount Routes
+// Routes
 app.use('/api/auth/login', loginLimiter);
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/classrooms', require('./routes/classrooms'));
-app.use('/api/seats', require('./routes/seats'));
-app.use('/api/student', require('./routes/student'));
-app.use('/api/master', require('./routes/admin'));
+app.use('/api/auth', authLimiter, require('./routes/auth'));
+app.use('/api/classrooms', globalLimiter, require('./routes/classrooms'));
+app.use('/api/seats', globalLimiter, require('./routes/seats'));
+app.use('/api/student', globalLimiter, require('./routes/student'));
+app.use('/api/master', globalLimiter, require('./routes/admin'));
 
 // API Health Check
 app.get('/', (req, res) => {
