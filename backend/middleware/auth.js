@@ -7,9 +7,23 @@ const protect = async (req, res, next) => {
   const clientIp = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
   let token;
 
+  // CSRF Protection for state-changing requests
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    const csrfCookie = req.cookies?.csrfToken;
+    const csrfHeader = req.headers['x-csrf-token'];
+    
+    // We allow bypass only if Authorization header is used (e.g. external API script)
+    if (!req.headers.authorization?.startsWith('Bearer')) {
+      if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+        console.warn(`[CSRF WARN] CSRF mismatch/missing | IP: ${clientIp} | Path: ${req.originalUrl}`);
+        return res.status(403).json({ success: false, message: 'CSRF validation failed' });
+      }
+    }
+  }
+
   // 1. Extract from cookies
-  if (req.cookies && req.cookies.token) {
-    token = req.cookies.token;
+  if (req.cookies && req.cookies.accessToken) {
+    token = req.cookies.accessToken;
   }
   // 2. Extract from Authorization header (fallback for compatibility)
   else if (

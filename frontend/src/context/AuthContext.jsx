@@ -32,8 +32,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.post('/api/auth/login', { email, password });
       if (res.data.success) {
-        if (res.data.token) {
-          localStorage.setItem('token', res.data.token);
+        if (res.data.csrfToken) {
+          localStorage.setItem('csrfToken', res.data.csrfToken);
         }
         setUser(res.data.user);
         connectSocket(); // Connect socket on login
@@ -52,8 +52,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.post('/api/auth/google', { idToken });
       if (res.data.success) {
-        if (res.data.token) {
-          localStorage.setItem('token', res.data.token);
+        if (res.data.csrfToken) {
+          localStorage.setItem('csrfToken', res.data.csrfToken);
         }
         setUser(res.data.user);
         connectSocket();
@@ -72,8 +72,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.post('/api/auth/studentinfo-google', { idToken });
       if (res.data.success) {
-        if (res.data.token) {
-          localStorage.setItem('token', res.data.token);
+        if (res.data.csrfToken) {
+          localStorage.setItem('csrfToken', res.data.csrfToken);
         }
         setUser(res.data.user);
         connectSocket();
@@ -92,8 +92,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.post('/api/auth/dev-login', { email, role });
       if (res.data.success) {
-        if (res.data.token) {
-          localStorage.setItem('token', res.data.token);
+        if (res.data.csrfToken) {
+          localStorage.setItem('csrfToken', res.data.csrfToken);
         }
         setUser(res.data.user);
         connectSocket();
@@ -117,8 +117,8 @@ export const AuthProvider = ({ children }) => {
         password,
       });
       if (res.data.success) {
-        if (res.data.token) {
-          localStorage.setItem('token', res.data.token);
+        if (res.data.csrfToken) {
+          localStorage.setItem('csrfToken', res.data.csrfToken);
         }
         setUser(res.data.user);
         connectSocket(); // Connect socket on register
@@ -135,11 +135,11 @@ export const AuthProvider = ({ children }) => {
   // Logout handler
   const logout = async () => {
     try {
-      await api.get('/api/auth/logout');
+      await api.post('/api/auth/logout');
     } catch (err) {
       console.error('Logout error on server:', err.message);
     }
-    localStorage.removeItem('token');
+    localStorage.removeItem('csrfToken');
     setUser(null);
     disconnectSocket(); // Disconnect socket on logout
   };

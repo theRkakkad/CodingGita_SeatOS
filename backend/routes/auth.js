@@ -3,39 +3,128 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const geoip = require('geoip-lite');
 const User = require('../models/User');
+const Session = require('../models/Session');
+const crypto = require('crypto');
 const LoginLog = require('../models/LoginLog');
 const { protect, authorize } = require('../middleware/auth');
 const sendEmail = require('../utils/sendEmail');
 const { OAuth2Client } = require('google-auth-library');
+const { z } = require('zod');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+// Zod Validation Schemas
+const registerSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  enrollmentNo: z.string().min(3, "Enrollment number is required"),
+  email: z.string().email("Invalid email format").refine(e => e.toLowerCase().endsWith('@swaminarayanuniversity.ac.in'), "Only @swaminarayanuniversity.ac.in addresses are allowed"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+const loginSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(1, "Password is required"),
+});
+
+const googleSchema = z.object({
+  idToken: z.string().min(1, "Please provide Google idToken"),
+});
+
 // Generate JWT Helper
-const generateToken = (id) => {
+const generateAccessToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '30d',
+    expiresIn: '5m', // Short-lived Access Token
   });
 };
 
-const sendTokenCookie = (user, statusCode, res) => {
-  const token = generateToken(user._id);
+const sendTokenCookie = async (user, statusCode, res, req) => {
+  const accessToken = generateAccessToken(user._id);
+  const refreshToken = crypto.randomBytes(40).toString('hex');
+  
+  // IP & Geolocation info extraction
+  const rawIp = req?.headers?.['x-forwarded-for'] || req?.ip || req?.connection?.remoteAddress || req?.socket?.remoteAddress || '127.0.0.1';
+  const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+  const userAgent = req?.headers?.['user-agent'] || '';
+  const geo = geoip.lookup(ipAddress);
+  const location = {
+    country: geo?.country || 'Localhost',
+    region: geo?.region || 'Localhost',
+    city: geo?.city || 'Localhost'
+  };
 
-  const cookieOptions = {
+  // Device Fingerprinting & New Device Detection
+  const existingDeviceSession = await Session.findOne({
+    userId: user._id,
+    'deviceInfo.browser': userAgent
+  });
+
+  const isNewDevice = !existingDeviceSession;
+
+  // Create Session
+  await Session.create({
+    userId: user._id,
+    refreshToken,
+    deviceInfo: { browser: userAgent },
+    ipAddress,
+    location,
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
+  });
+
+  // Send New Device Alert Email
+  if (isNewDevice) {
+    try {
+      const emailHtml = `
+        <h2>New Sign-In Detected</h2>
+        <p>Hi ${user.name},</p>
+        <p>We noticed a new login to your SeatOS account from a device we haven't seen recently.</p>
+        <ul>
+          <li><strong>Device/Browser:</strong> ${userAgent || 'Unknown'}</li>
+          <li><strong>IP Address:</strong> ${ipAddress}</li>
+          <li><strong>Location:</strong> ${location.city}, ${location.region}, ${location.country}</li>
+        </ul>
+        <p>If this was you, you can safely ignore this email.</p>
+        <p>If you don't recognize this activity, please contact administration immediately as your Google account may be compromised.</p>
+      `;
+      
+      await sendEmail({
+        email: user.email,
+        subject: 'Security Alert: New Sign-In to SeatOS',
+        html: emailHtml,
+        forceSend: false // Respect DISABLE_EMAIL env var
+      });
+    } catch (err) {
+      console.error('Failed to send new device email alert:', err);
+    }
+  }
+
+  const cookieOptionsAccess = {
+    expires: new Date(Date.now() + 5 * 60 * 1000), // 5 mins
+    httpOnly: true,
+    sameSite: 'lax',
+  };
+
+  const cookieOptionsRefresh = {
     expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
     httpOnly: true,
-    sameSite: 'strict',
+    sameSite: 'lax',
   };
 
   if (process.env.NODE_ENV === 'production') {
-    cookieOptions.secure = true;
+    cookieOptionsAccess.secure = true;
+    cookieOptionsRefresh.secure = true;
   }
+
+  // Generate CSRF Token for Double Submit Cookie pattern
+  const csrfToken = crypto.randomBytes(32).toString('hex');
 
   res
     .status(statusCode)
-    .cookie('token', token, cookieOptions)
+    .cookie('accessToken', accessToken, cookieOptionsAccess)
+    .cookie('refreshToken', refreshToken, cookieOptionsRefresh)
+    .cookie('csrfToken', csrfToken, { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' })
     .json({
       success: true,
-      token,
+      csrfToken,
       user: {
         _id: user._id,
         name: user.name,
@@ -52,26 +141,24 @@ const sendTokenCookie = (user, statusCode, res) => {
 // @access  Private (Admin)
 router.post('/register', protect, authorize('admin'), async (req, res) => {
   try {
-    const { name, enrollmentNo, email, password } = req.body;
-
-    if (!name || !enrollmentNo || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide all fields' });
+    // Validate Input with Zod
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
     }
-
-    // Check if email ends with @gmail.com
-    if (!email.toLowerCase().endsWith('@gmail.com')) {
-      return res.status(400).json({ success: false, message: 'Only Gmail addresses (@gmail.com) are allowed to register' });
-    }
+    const { name, enrollmentNo, email, password } = parsed.data;
 
     // Check if user already exists by email or enrollment number
     const userExistsByEmail = await User.findOne({ email });
     if (userExistsByEmail) {
-      return res.status(400).json({ success: false, message: 'Email already registered' });
+      // Account Enumeration Protection: Generic error
+      return res.status(400).json({ success: false, message: 'Registration failed. Data conflicts with existing records.' });
     }
 
     const userExistsByEnrollment = await User.findOne({ enrollmentNo });
     if (userExistsByEnrollment) {
-      return res.status(400).json({ success: false, message: 'Enrollment number already registered' });
+      // Account Enumeration Protection: Generic error
+      return res.status(400).json({ success: false, message: 'Registration failed. Data conflicts with existing records.' });
     }
 
     // Create user (defaults to role: 'student')
@@ -105,7 +192,7 @@ router.post('/register', protect, authorize('admin'), async (req, res) => {
         html: emailHtml,
       }).catch((err) => console.error('Error sending welcome email:', err.message));
 
-      sendTokenCookie(user, 201, res);
+      await sendTokenCookie(user, 201, res, req);
     } else {
       res.status(400).json({ success: false, message: 'Invalid user data' });
     }
@@ -120,11 +207,12 @@ router.post('/register', protect, authorize('admin'), async (req, res) => {
 // @access  Public
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide email and password' });
+    // Validate Input with Zod
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
     }
+    const { email, password } = parsed.data;
 
     // IP & Geolocation info extraction
     const rawIp = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
@@ -176,7 +264,7 @@ router.post('/login', async (req, res) => {
       success: true
     });
 
-    sendTokenCookie(user, 200, res);
+    await sendTokenCookie(user, 200, res, req);
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error during login' });
@@ -188,10 +276,12 @@ router.post('/login', async (req, res) => {
 // @access  Public
 router.post('/google', async (req, res) => {
   try {
-    const { idToken } = req.body;
-    if (!idToken) {
-      return res.status(400).json({ success: false, message: 'Please provide Google idToken' });
+    // Validate Input with Zod
+    const parsed = googleSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
     }
+    const { idToken } = parsed.data;
 
     // Verify Google Token strictly (NO MOCKS)
     const ticket = await client.verifyIdToken({
@@ -202,9 +292,11 @@ router.post('/google', async (req, res) => {
 
     const { email, name, picture } = payload;
 
-    // Check university domain strictly
-    if (!email.toLowerCase().endsWith('@swaminarayanuniversity.ac.in')) {
-      return res.status(403).json({ success: false, message: 'Only @swaminarayanuniversity.ac.in addresses are allowed' });
+    // Check university domain strictly (allow specific admins to bypass)
+    const adminWhitelist = ['zeelkundariya13@gmail.com', 'admin@codinggita.com'];
+    if (!email.toLowerCase().endsWith('@swaminarayanuniversity.ac.in') && !adminWhitelist.includes(email.toLowerCase())) {
+      // Account Enumeration Protection: generic message
+      return res.status(403).json({ success: false, message: 'Authentication failed. Only university accounts are allowed.' });
     }
 
     // IP & Geolocation info extraction
@@ -243,7 +335,7 @@ router.post('/google', async (req, res) => {
       success: true
     });
 
-    sendTokenCookie(user, 200, res);
+    await sendTokenCookie(user, 200, res, req);
   } catch (error) {
     console.error(error);
     res.status(401).json({ success: false, message: 'Google Authentication failed' });
@@ -317,7 +409,7 @@ router.post('/studentinfo-google', async (req, res) => {
       success: true
     });
 
-    sendTokenCookie(user, 200, res);
+    await sendTokenCookie(user, 200, res, req);
   } catch (error) {
     console.error(error);
     res.status(401).json({ success: false, message: 'Google Authentication failed' });
@@ -351,20 +443,107 @@ router.get('/me', protect, async (req, res) => {
   }
 });
 
-// @desc    Logout user / clear cookie
-// @route   GET /api/auth/logout
-// @access  Private
-router.get('/logout', protect, async (req, res) => {
+// @desc    Refresh Access Token
+// @route   POST /api/auth/refresh
+// @access  Public
+router.post('/refresh', async (req, res) => {
   try {
-    res.cookie('token', 'none', {
-      expires: new Date(Date.now() + 10 * 1000),
-      httpOnly: true,
+    const { refreshToken } = req.cookies;
+    if (!refreshToken) {
+      return res.status(401).json({ success: false, message: 'No refresh token provided' });
+    }
+
+    // Find session by current or used refresh token
+    const session = await Session.findOne({ 
+      $or: [{ refreshToken }, { usedRefreshTokens: refreshToken }] 
     });
-    res.json({ success: true, message: 'Logged out successfully' });
+
+    if (!session) {
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      res.clearCookie('csrfToken');
+      return res.status(401).json({ success: false, message: 'Invalid refresh token' });
+    }
+
+    // Token Reuse Detection
+    if (session.usedRefreshTokens.includes(refreshToken)) {
+      console.warn(`[SECURITY ALERT] Token reuse detected for User ${session.userId}. Revoking session.`);
+      session.isRevoked = true;
+      await session.save();
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      res.clearCookie('csrfToken');
+      return res.status(401).json({ success: false, message: 'Token reuse detected. Session revoked.' });
+    }
+
+    // Normal expiration check
+    if (session.isRevoked || session.expiresAt < new Date()) {
+      session.isRevoked = true;
+      await session.save();
+      res.clearCookie('accessToken');
+      res.clearCookie('refreshToken');
+      res.clearCookie('csrfToken');
+      return res.status(401).json({ success: false, message: 'Session expired or invalid' });
+    }
+
+    const user = await User.findById(session.userId);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'User not found' });
+    }
+
+    // Token Rotation
+    const newRefreshToken = crypto.randomBytes(40).toString('hex');
+    session.usedRefreshTokens.push(refreshToken); // Mark old token as used
+    session.refreshToken = newRefreshToken;
+    session.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await session.save();
+
+    const newAccessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: '5m', // Short-lived Access Token
+    });
+
+    const cookieOptionsAccess = {
+      expires: new Date(Date.now() + 5 * 60 * 1000),
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
+    };
+    const cookieOptionsRefresh = {
+      expires: session.expiresAt,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
+    };
+    
+    const csrfToken = crypto.randomBytes(32).toString('hex');
+
+    res
+      .status(200)
+      .cookie('accessToken', newAccessToken, cookieOptionsAccess)
+      .cookie('refreshToken', newRefreshToken, cookieOptionsRefresh)
+      .cookie('csrfToken', csrfToken, { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' })
+      .json({ success: true, csrfToken });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: 'Server error during logout' });
+    res.status(500).json({ success: false, message: 'Server error during refresh' });
   }
+});
+
+// @desc    Logout user
+// @route   POST /api/auth/logout
+// @access  Public
+router.post('/logout', async (req, res) => {
+  try {
+    const { refreshToken } = req.cookies;
+    if (refreshToken) {
+      await Session.findOneAndUpdate({ refreshToken }, { isRevoked: true });
+    }
+  } catch(e) {}
+  
+  res.clearCookie('accessToken');
+  res.clearCookie('refreshToken');
+  res.clearCookie('csrfToken');
+  res.json({ success: true, message: 'Logged out successfully' });
 });
 
 // @desc    Developer Bypass Login (For local development only)
@@ -390,7 +569,7 @@ router.post('/dev-login', async (req, res) => {
       await user.save();
     }
 
-    sendTokenCookie(user, 200, res);
+    await sendTokenCookie(user, 200, res, req);
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Dev login failed' });

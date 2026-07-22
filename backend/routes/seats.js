@@ -5,6 +5,15 @@ const Booking = require('../models/Booking');
 const Settings = require('../models/Settings');
 const { protect } = require('../middleware/auth');
 const haversine = require('haversine-distance');
+const { z } = require('zod');
+
+// Booking Validation Schema
+const bookSeatSchema = z.object({
+  seatId: z.string().min(24, "Invalid seat ID"),
+  photo: z.string().min(10, "Photo is required for face verification"),
+  latitude: z.number({ required_error: "Latitude is required", invalid_type_error: "Latitude must be a number" }),
+  longitude: z.number({ required_error: "Longitude is required", invalid_type_error: "Longitude must be a number" })
+});
 
 // Mock Lab Coordinates
 const LAB_LAT = process.env.LAB_LAT ? parseFloat(process.env.LAB_LAT) : 23.0225;
@@ -50,11 +59,12 @@ router.get('/booking-status', async (req, res) => {
 // @route   POST /api/seats/book
 // @access  Private (Student)
 router.post('/book', protect, checkBookingOpen, async (req, res) => {
-  const { seatId, photo, latitude, longitude } = req.body;
-
-  if (!seatId || !photo || latitude === undefined || longitude === undefined) {
-    return res.status(400).json({ success: false, message: 'Please provide seatId, photo, latitude, and longitude' });
+  const parsed = bookSeatSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
   }
+
+  const { seatId, photo, latitude, longitude } = parsed.data;
 
   // 1. Verify Geolocation
   const studentLocation = { lat: latitude, lon: longitude };

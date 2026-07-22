@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import DashboardCard from '../components/DashboardCard';
 import api from '../services/api';
 import { socket } from '../services/socket';
-import { Users, CheckCircle, Armchair, TrendingUp, School, ArrowRight, Zap, Check, X, Mail } from 'lucide-react';
+import { Users, CheckCircle, Armchair, TrendingUp, School, ArrowRight, Zap, Check, X, Mail, Download } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
@@ -52,6 +52,22 @@ const AdminDashboard = () => {
       }
     } catch (error) {
       console.error('Error updating email setting:', error);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const response = await api.get('/api/admin/export/bookings', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'bookings_export.csv');
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Failed to export data');
     }
   };
 
@@ -124,7 +140,15 @@ const AdminDashboard = () => {
 
         {/* ── Stats Grid ── */}
         <section className="space-y-3">
-          <p className="section-label">System Statistics</p>
+          <div className="flex items-center justify-between">
+            <p className="section-label mb-0">System Statistics</p>
+            <button 
+              onClick={handleExport}
+              className="flex items-center gap-2 bg-[#5d21d1] hover:bg-[#4b19aa] text-white px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-lg"
+            >
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <DashboardCard title="Registered Students" value={stats?.totalStudents ?? '—'} icon={Users} color="slate" />
             <DashboardCard title="Total Booked Seats" value={stats?.totalBookedSeats ?? '—'} icon={CheckCircle} color="red" />
