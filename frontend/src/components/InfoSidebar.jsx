@@ -79,7 +79,7 @@ const InfoSidebar = () => {
           style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
         >
           <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm uppercase shrink-0 cursor-pointer hover:ring-2 hover:ring-emerald-400/50 transition-all"
+            className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm uppercase shrink-0 cursor-pointer hover:ring-2 hover:ring-amber-400/50 transition-all"
             style={{ background: 'linear-gradient(135deg, #f9ca3a, #f5a623)', color: '#1a0900' }}
             onDoubleClick={() => setIsFaceIdOpen(true)}
             onClick={() => setIsFaceIdOpen(true)} // Added click as well for easier trigger

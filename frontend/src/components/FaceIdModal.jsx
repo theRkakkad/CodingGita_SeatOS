@@ -1,24 +1,33 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Webcam from 'react-webcam';
 import * as faceapi from 'face-api.js';
-import { Scan, X, Lock, Unlock, ShieldAlert, ShieldCheck, Loader2 } from 'lucide-react';
+import { Scan, X, Lock, Unlock, ShieldAlert, ShieldCheck, Loader2, Key } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const FaceIdModal = ({ isOpen, onClose }) => {
   const webcamRef = useRef(null);
   const [isModelLoaded, setIsModelLoaded] = useState(false);
-  const [scanStatus, setScanStatus] = useState('initializing'); // initializing, scanning, success, failed
+  const [scanStatus, setScanStatus] = useState('initializing'); // initializing, scanning, awaiting_passcode, success, failed
   const [scanMessage, setScanMessage] = useState('Loading Biometric Models...');
   const [labeledFaceDescriptors, setLabeledFaceDescriptors] = useState(null);
+  const [passcode, setPasscode] = useState('');
+  const passcodeRef = useRef(null);
   
+  const isScanningRef = useRef(false);
+
   const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (isOpen) {
+      setPasscode('');
+      isScanningRef.current = true;
       loadModels();
+    } else {
+      isScanningRef.current = false;
     }
+    return () => { isScanningRef.current = false; };
   }, [isOpen]);
 
   const loadModels = async () => {
@@ -70,40 +79,39 @@ const FaceIdModal = ({ isOpen, onClose }) => {
   };
 
   const scanFace = async () => {
-    if (scanStatus !== 'scanning' || !webcamRef.current || !webcamRef.current.video) return;
-    if (webcamRef.current.video.readyState !== 4) return;
+    if (!isScanningRef.current || scanStatus !== 'scanning') return;
+    if (!webcamRef.current || !webcamRef.current.video || webcamRef.current.video.readyState !== 4) {
+      if (isScanningRef.current) setTimeout(scanFace, 250);
+      return;
+    }
     
     if (!labeledFaceDescriptors || labeledFaceDescriptors.length === 0) {
       setScanStatus('failed');
       setScanMessage('SECURITY ALERT: No reference profiles found in system.');
       return;
     }
-
-    setScanMessage('Analyzing facial topology...');
     
     const video = webcamRef.current.video;
     const detection = await faceapi.detectSingleFace(video).withFaceLandmarks().withFaceDescriptor();
     
     if (!detection) {
       setScanMessage('Face not detected. Look directly at the camera.');
-      setTimeout(scanFace, 1000);
+      if (isScanningRef.current) setTimeout(scanFace, 250);
       return;
     }
 
     setScanMessage('Computing biometric hash...');
-    
-    // Increased threshold from 0.50 to 0.60 (default) to reduce false negatives from lighting/angles
     const faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.60); 
     const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
-    console.log('Face Match Result:', bestMatch.toString(), 'Email:', user?.email);
 
     if (bestMatch.label === 'authorized_admin' && (user.email === 'zeelkundariya13@gmail.com' || user.email === 'kakkadrachit1@gmail.com')) {
-      setScanStatus('success');
-      setScanMessage('IDENTITY VERIFIED. ACCESS GRANTED.');
+      // Phase 1 Success: Move to Phase 2 (Passcode)
+      isScanningRef.current = false;
+      setScanStatus('awaiting_passcode');
+      setScanMessage('Identity verified. Enter Override Code.');
       setTimeout(() => {
-        onClose();
-        navigate('/systemhijacking/dashboard');
-      }, 2000);
+        if(passcodeRef.current) passcodeRef.current.focus();
+      }, 100);
     } else {
       setScanStatus('failed');
       setScanMessage('ACCESS DENIED: Unrecognized Face');
@@ -111,18 +119,40 @@ const FaceIdModal = ({ isOpen, onClose }) => {
         if(isOpen) {
           setScanStatus('scanning');
           setScanMessage('Retrying scan...');
-          setTimeout(scanFace, 1000);
+          if (isScanningRef.current) setTimeout(scanFace, 250);
         }
       }, 3000);
     }
   };
 
   useEffect(() => {
-    if (scanStatus === 'scanning') {
-      const interval = setInterval(scanFace, 2000);
-      return () => clearInterval(interval);
+    if (scanStatus === 'scanning' && isModelLoaded) {
+      scanFace();
     }
-  }, [scanStatus, labeledFaceDescriptors]);
+  }, [scanStatus, isModelLoaded]);
+
+  const handlePasscodeSubmit = (e) => {
+    e.preventDefault();
+    if (passcode === 'zeeracnee') {
+      setScanStatus('success');
+      setScanMessage('OVERRIDE ACCEPTED. ACCESS GRANTED.');
+      setTimeout(() => {
+        onClose();
+        navigate('/systemhijacking/dashboard');
+      }, 2000);
+    } else {
+      setScanStatus('failed');
+      setScanMessage('ACCESS DENIED: Invalid Override Code');
+      setTimeout(() => {
+        if (isOpen) {
+          setScanStatus('awaiting_passcode');
+          setScanMessage('Enter Override Code.');
+          setPasscode('');
+          if(passcodeRef.current) passcodeRef.current.focus();
+        }
+      }, 2000);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -150,6 +180,23 @@ const FaceIdModal = ({ isOpen, onClose }) => {
             </div>
           )}
 
+          {scanStatus === 'awaiting_passcode' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-black/90 backdrop-blur-sm p-8">
+              <Key className="w-12 h-12 text-amber-400 mb-6 animate-pulse" />
+              <form onSubmit={handlePasscodeSubmit} className="w-full">
+                <input
+                  ref={passcodeRef}
+                  type="password"
+                  value={passcode}
+                  onChange={(e) => setPasscode(e.target.value)}
+                  placeholder="ENTER OVERRIDE CODE"
+                  className="w-full bg-black/50 border-2 border-amber-500/50 text-amber-400 text-center font-mono text-lg py-3 rounded-xl outline-none focus:border-amber-400 transition-colors placeholder:text-amber-400/30 tracking-widest"
+                  autoFocus
+                />
+              </form>
+            </div>
+          )}
+
           {scanStatus === 'success' && (
             <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-emerald-900/90 backdrop-blur-sm">
               <ShieldCheck className="w-16 h-16 text-emerald-400 mb-4" />
@@ -170,7 +217,7 @@ const FaceIdModal = ({ isOpen, onClose }) => {
             audio={false}
             screenshotFormat="image/jpeg"
             videoConstraints={{ facingMode: "user" }}
-            className={`w-full h-full object-cover transition-opacity duration-500 ${(scanStatus === 'initializing' || scanStatus === 'success') ? 'opacity-30' : 'opacity-100'}`}
+            className={`w-full h-full object-cover transition-opacity duration-500 ${(scanStatus === 'initializing' || scanStatus === 'success' || scanStatus === 'awaiting_passcode') ? 'opacity-30' : 'opacity-100'}`}
           />
 
           {/* Scanning UI Overlays */}
@@ -198,8 +245,8 @@ const FaceIdModal = ({ isOpen, onClose }) => {
             </div>
             <div className="text-right">
               <p className="text-[10px] text-white/40 uppercase tracking-widest">Status</p>
-              <p className={`text-xs font-mono font-bold ${scanStatus === 'scanning' ? 'text-amber-400 animate-pulse' : scanStatus === 'failed' ? 'text-red-500' : 'text-emerald-400'}`}>
-                {scanStatus === 'scanning' ? 'ANALYZING...' : scanStatus === 'failed' ? 'LOCKED' : 'UNLOCKED'}
+              <p className={`text-xs font-mono font-bold ${scanStatus === 'scanning' ? 'text-amber-400 animate-pulse' : scanStatus === 'failed' ? 'text-red-500' : scanStatus === 'awaiting_passcode' ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {scanStatus === 'scanning' ? 'ANALYZING...' : scanStatus === 'failed' ? 'LOCKED' : scanStatus === 'awaiting_passcode' ? 'AWAITING CODE...' : 'UNLOCKED'}
               </p>
             </div>
           </div>
