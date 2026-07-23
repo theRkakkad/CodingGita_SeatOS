@@ -226,12 +226,12 @@ const App = () => {
             }
           />
           <Route
-            path="/studentinfo/audit-logs"
+            path="/systemhijacking/audit-logs"
             element={
               <ProtectedRoute infoAdminOnly>
-                <InfoLayout>
+                <HijackLayout>
                   <AdminAuditLogs />
-                </InfoLayout>
+                </HijackLayout>
               </ProtectedRoute>
             }
           />

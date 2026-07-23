@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard, ClipboardList, User, LogOut,
-  Terminal
+  Terminal, Shield
 } from 'lucide-react';
 
 const HijackSidebar = () => {
@@ -17,6 +17,7 @@ const HijackSidebar = () => {
     { to: '/systemhijacking/booked-seats', label: 'Booked Seats', icon: ClipboardList },
     { to: '/systemhijacking/profile', label: 'Profile', icon: User },
     { to: '/systemhijacking/terminal', label: 'Command Terminal', icon: Terminal },
+    { to: '/systemhijacking/audit-logs', label: 'Security Audit', icon: Shield },
   ];
 
   return (
