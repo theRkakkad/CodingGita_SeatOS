@@ -28,6 +28,7 @@ const loginSchema = z.object({
 
 const googleSchema = z.object({
   idToken: z.string().min(1, "Please provide Google idToken"),
+  turnstileToken: z.string().min(1, "Please complete the CAPTCHA security check"),
 });
 
 // Generate JWT Helper
@@ -281,7 +282,25 @@ router.post('/google', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
     }
-    const { idToken } = parsed.data;
+    const { idToken, turnstileToken } = parsed.data;
+
+    // Verify Cloudflare Turnstile CAPTCHA
+    const turnstileSecret = '1x0000000000000000000000000000000AA'; // Dummy key for always passes
+    const turnstileVerifyURL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+    
+    // We use the native fetch API (Node 18+)
+    const turnstileRes = await fetch(turnstileVerifyURL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `secret=${turnstileSecret}&response=${turnstileToken}`,
+    });
+    
+    const turnstileOutcome = await turnstileRes.json();
+    if (!turnstileOutcome.success) {
+      return res.status(403).json({ success: false, message: 'CAPTCHA verification failed. Are you a bot?' });
+    }
 
     // Verify Google Token strictly (NO MOCKS)
     const ticket = await client.verifyIdToken({

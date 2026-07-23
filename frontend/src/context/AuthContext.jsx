@@ -48,9 +48,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Google Login handler
-  const googleLogin = async (idToken) => {
+  const googleLogin = async (idToken, turnstileToken) => {
     try {
-      const res = await api.post('/api/auth/google', { idToken });
+      const res = await api.post('/api/auth/google', { idToken, turnstileToken });
       if (res.data.success) {
         if (res.data.csrfToken) {
           localStorage.setItem('csrfToken', res.data.csrfToken);
