@@ -63,8 +63,8 @@ const getGodLevelEmailTemplate = (student, classroom, seat, type = 'booking') =>
     actionText = 'An administrator has successfully reassigned a seat to you on the portal.';
   } else if (type === 'cancel') {
     headerColor = '#ef4444';
-    headerTitle = 'Seat Reservation Revoked';
-    actionText = 'An administrator has cancelled your seat booking reservation on the portal.';
+    headerTitle = 'Seat Booking Failed (Network Error)';
+    actionText = 'Your seat booking was not completed due to a temporary network issue on the portal.';
   }
 
   const showCredentials = type !== 'cancel' && student.email;
@@ -591,8 +591,8 @@ router.delete('/bookings/:id', async (req, res) => {
 
     if (student && req.query.sendEmail === 'true' && emailEnabled) {
       const classroom = await Classroom.findById(booking.classroomId);
-      const emailSubject = 'CodingGita - Seat Reservation Revoked';
-      const emailText = `Hello ${student.name},\n\nYour seat booking for Seat ${booking.seatNumber} in ${classroom ? classroom.name : 'Classroom'} has been cancelled by the administrator.\n\nBest regards,\nCodingGita Admin Team`;
+      const emailSubject = 'CodingGita - Seat Booking Failed (Network Error)';
+      const emailText = `Hello ${student.name},\n\nYour seat booking for Seat ${booking.seatNumber} in ${classroom ? classroom.name : 'Classroom'} was not completed due to a temporary network issue.\n\nBest regards,\nCodingGita Admin Team`;
       const emailHtml = getGodLevelEmailTemplate(student, classroom, booking, 'cancel');
       sendEmailUtil({
         email: student.email,
@@ -615,7 +615,7 @@ router.delete('/bookings/:id', async (req, res) => {
       // Notify the specific student that their booking was cancelled
       io.to(`student:${studentId}`).emit('student:booking-updated', {
         action: 'cancelled',
-        message: 'Your booking has been cancelled by the administrator.',
+        message: 'Your booking could not be completed due to a network issue.',
       });
 
       // Broadcast global classroom stats update
