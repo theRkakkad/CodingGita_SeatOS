@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import api from '../services/api';
+import { UAParser } from 'ua-parser-js';
 import { Shield, Search, AlertTriangle, CheckCircle, Clock, MapPin, Monitor } from 'lucide-react';
 
 const AdminAuditLogs = () => {
@@ -103,9 +104,19 @@ const AdminAuditLogs = () => {
                         </div>
                       </td>
                       <td style={tdStyle}>
-                        <div className="flex items-center gap-1.5 max-w-[200px] truncate" title={log.userAgent}>
+                        <div className="flex items-center gap-1.5" title={log.userAgent}>
                           <Monitor className="w-3.5 h-3.5 shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }} />
-                          <span className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.5)' }}>{log.userAgent || 'Unknown Device'}</span>
+                          <span className="text-xs" style={{ color: 'rgba(255,255,255,0.7)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                            {(() => {
+                              const parser = new UAParser(log.userAgent);
+                              const browser = parser.getBrowser();
+                              const os = parser.getOS();
+                              if (browser.name && os.name) {
+                                return `${browser.name} ${browser.version || ''} on ${os.name} ${os.version || ''}`.trim();
+                              }
+                              return log.userAgent || 'Unknown Device';
+                            })()}
+                          </span>
                         </div>
                       </td>
                     </tr>

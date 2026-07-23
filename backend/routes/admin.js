@@ -6,6 +6,29 @@ const Seat = require('../models/Seat');
 const Booking = require('../models/Booking');
 const Settings = require('../models/Settings');
 const LoginLog = require('../models/LoginLog');
+const { z } = require('zod');
+
+// --- Zod Validation Schemas ---
+const createBookingSchema = z.object({
+  studentId: z.string().min(1, 'Student ID is required'),
+  seatId: z.string().min(1, 'Seat ID is required'),
+  cancelPrevious: z.boolean().optional(),
+  sendEmail: z.boolean().optional()
+});
+
+const reassignBookingSchema = z.object({
+  studentId: z.string().min(1, 'Student ID is required'),
+  cancelPrevious: z.boolean().optional(),
+  sendEmail: z.boolean().optional()
+});
+
+const updateSettingsSchema = z.object({
+  registrationOpen: z.boolean().optional(),
+  bookingOpen: z.boolean().optional(),
+  emailEnabled: z.boolean().optional()
+});
+// ------------------------------
+
 const { protect, authorize } = require('../middleware/auth');
 const sendEmailUtil = require('../utils/sendEmail');
 
@@ -40,8 +63,8 @@ const getGodLevelEmailTemplate = (student, classroom, seat, type = 'booking') =>
     actionText = 'An administrator has successfully reassigned a seat to you on the portal.';
   } else if (type === 'cancel') {
     headerColor = '#ef4444';
-    headerTitle = 'Seat Reservation Revoked';
-    actionText = 'An administrator has cancelled your seat booking reservation on the portal.';
+    headerTitle = 'Seat Booking Failed (Network Error)';
+    actionText = 'Your seat booking was not completed due to a temporary network issue on the portal.';
   }
 
   const showCredentials = type !== 'cancel' && student.email;
@@ -568,8 +591,8 @@ router.delete('/bookings/:id', async (req, res) => {
 
     if (student && req.query.sendEmail === 'true' && emailEnabled) {
       const classroom = await Classroom.findById(booking.classroomId);
-      const emailSubject = 'CodingGita - Seat Reservation Revoked';
-      const emailText = `Hello ${student.name},\n\nYour seat booking for Seat ${booking.seatNumber} in ${classroom ? classroom.name : 'Classroom'} has been cancelled by the administrator.\n\nBest regards,\nCodingGita Admin Team`;
+      const emailSubject = 'CodingGita - Seat Booking Failed (Network Error)';
+      const emailText = `Hello ${student.name},\n\nYour seat booking for Seat ${booking.seatNumber} in ${classroom ? classroom.name : 'Classroom'} was not completed due to a temporary network issue.\n\nBest regards,\nCodingGita Admin Team`;
       const emailHtml = getGodLevelEmailTemplate(student, classroom, booking, 'cancel');
       sendEmailUtil({
         email: student.email,
@@ -592,7 +615,7 @@ router.delete('/bookings/:id', async (req, res) => {
       // Notify the specific student that their booking was cancelled
       io.to(`student:${studentId}`).emit('student:booking-updated', {
         action: 'cancelled',
-        message: 'Your booking has been cancelled by the administrator.',
+        message: 'Your booking could not be completed due to a network issue.',
       });
 
       // Broadcast global classroom stats update
@@ -647,11 +670,11 @@ router.get('/classrooms/:classroomId/students', async (req, res) => {
 // @route   POST /api/admin/bookings
 // @access  Private (Admin)
 router.post('/bookings', async (req, res) => {
-  const { studentId, seatId, cancelPrevious, sendEmail } = req.body;
-
-  if (!studentId || !seatId) {
-    return res.status(400).json({ success: false, message: 'Please provide studentId and seatId' });
+  const parsed = createBookingSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, message: parsed.error.errors[0].message });
   }
+  const { studentId, seatId, cancelPrevious, sendEmail } = parsed.data;
 
   try {
     const seat = await Seat.findById(seatId);
@@ -779,11 +802,11 @@ router.post('/bookings', async (req, res) => {
 // @access  Private (Admin)
 router.patch('/bookings/:bookingId/reassign', async (req, res) => {
   const { bookingId } = req.params;
-  const { studentId, cancelPrevious, sendEmail } = req.body;
-
-  if (!studentId) {
-    return res.status(400).json({ success: false, message: 'Please provide studentId' });
+  const parsed = reassignBookingSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, message: parsed.error.errors[0].message });
   }
+  const { studentId, cancelPrevious, sendEmail } = parsed.data;
 
   try {
     let booking = await Booking.findById(bookingId);
@@ -930,13 +953,15 @@ router.get('/settings', async (req, res) => {
 // @access  Private (Admin)
 router.post('/settings', async (req, res) => {
   try {
-    const { registrationOpen, bookingOpen, emailEnabled } = req.body;
+    const parsed = updateSettingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, message: parsed.error.errors[0].message });
+    }
+    const { registrationOpen, bookingOpen, emailEnabled } = parsed.data;
+    
     const updates = {};
     
     if (registrationOpen !== undefined) {
-      if (typeof registrationOpen !== 'boolean') {
-        return res.status(400).json({ success: false, message: 'Invalid value for registrationOpen' });
-      }
       await Settings.findOneAndUpdate(
         { key: 'registration_open' },
         { value: registrationOpen },
@@ -946,9 +971,6 @@ router.post('/settings', async (req, res) => {
     }
 
     if (bookingOpen !== undefined) {
-      if (typeof bookingOpen !== 'boolean') {
-        return res.status(400).json({ success: false, message: 'Invalid value for bookingOpen' });
-      }
       await Settings.findOneAndUpdate(
         { key: 'booking_open' },
         { value: bookingOpen },
@@ -958,9 +980,6 @@ router.post('/settings', async (req, res) => {
     }
 
     if (emailEnabled !== undefined) {
-      if (typeof emailEnabled !== 'boolean') {
-        return res.status(400).json({ success: false, message: 'Invalid value for emailEnabled' });
-      }
       await Settings.findOneAndUpdate(
         { key: 'email_enabled' },
         { value: emailEnabled },

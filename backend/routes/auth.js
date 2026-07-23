@@ -10,8 +10,35 @@ const { protect, authorize } = require('../middleware/auth');
 const sendEmail = require('../utils/sendEmail');
 const { OAuth2Client } = require('google-auth-library');
 const { z } = require('zod');
+const UAParser = require('ua-parser-js');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+// Network Info Helper for better localhost/public IP resolution
+const resolveNetworkInfo = async (req) => {
+  let ipAddress = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
+  ipAddress = ipAddress.includes(',') ? ipAddress.split(',')[0].trim() : ipAddress.trim();
+  
+  if (ipAddress === '::1' || ipAddress === '127.0.0.1') {
+    try {
+      // For local development, fetch the machine's actual public IP
+      const ipRes = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipRes.json();
+      ipAddress = ipData.ip;
+    } catch (e) {
+      console.log('Public IP lookup fallback failed');
+    }
+  }
+
+  const geo = geoip.lookup(ipAddress);
+  const location = {
+    country: geo?.country || 'Unknown',
+    region: geo?.region || 'Unknown',
+    city: geo?.city || 'Unknown'
+  };
+
+  return { ipAddress, location };
+};
 
 // Zod Validation Schemas
 const registerSchema = z.object({
@@ -53,33 +80,46 @@ const sendTokenCookie = async (user, statusCode, res, req) => {
     city: geo?.city || 'Localhost'
   };
 
-  // Device Fingerprinting & New Device Detection
+  // Advanced Device Fingerprinting with ua-parser-js
+  const parser = new UAParser(userAgent);
+  const parsedBrowser = parser.getBrowser().name || 'Unknown Browser';
+  const parsedOS = parser.getOS().name || 'Unknown OS';
+
   const existingDeviceSession = await Session.findOne({
     userId: user._id,
-    'deviceInfo.browser': userAgent
+    'deviceInfo.browser': parsedBrowser,
+    'deviceInfo.os': parsedOS,
   });
 
-  const isNewDevice = !existingDeviceSession;
+  const existingLocationSession = await Session.findOne({
+    userId: user._id,
+    'location.country': location.country,
+    'location.city': location.city,
+  });
+
+  // Only flag as a new device if we've never seen this exact Browser+OS combo OR this exact City+Country combo before
+  const isAnomaly = !existingDeviceSession || !existingLocationSession;
 
   // Create Session
   await Session.create({
     userId: user._id,
     refreshToken,
-    deviceInfo: { browser: userAgent },
+    deviceInfo: { browser: parsedBrowser, os: parsedOS },
     ipAddress,
     location,
     expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days
   });
 
-  // Send New Device Alert Email
-  if (isNewDevice) {
+  // Send New Device/Anomaly Alert Email
+  if (isAnomaly) {
     try {
       const emailHtml = `
-        <h2>New Sign-In Detected</h2>
+        <h2>Security Alert: New Sign-In Detected</h2>
         <p>Hi ${user.name},</p>
-        <p>We noticed a new login to your SeatOS account from a device we haven't seen recently.</p>
+        <p>We noticed a new login to your SeatOS account from a new location or operating system.</p>
         <ul>
-          <li><strong>Device/Browser:</strong> ${userAgent || 'Unknown'}</li>
+          <li><strong>Operating System:</strong> ${parsedOS}</li>
+          <li><strong>Browser:</strong> ${parsedBrowser}</li>
           <li><strong>IP Address:</strong> ${ipAddress}</li>
           <li><strong>Location:</strong> ${location.city}, ${location.region}, ${location.country}</li>
         </ul>
@@ -216,15 +256,10 @@ router.post('/login', async (req, res) => {
     const { email, password } = parsed.data;
 
     // IP & Geolocation info extraction
-    const rawIp = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
-    const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+    const networkInfo = await resolveNetworkInfo(req);
+    const ipAddress = networkInfo.ipAddress;
+    const location = networkInfo.location;
     const userAgent = req.headers['user-agent'] || '';
-    const geo = geoip.lookup(ipAddress);
-    const location = {
-      country: geo?.country || 'Localhost',
-      region: geo?.region || 'Localhost',
-      city: geo?.city || 'Localhost'
-    };
 
     // Check for user
     const user = await User.findOne({ email }).select('+password');

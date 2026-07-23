@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import api from '../services/api';
 import { socket } from '../services/socket';
-import { ClipboardList, Search, School, Armchair, Calendar, MapPin, Camera, X, Power, Trash2, Edit, Plus } from 'lucide-react';
+import { ClipboardList, Search, School, Armchair, Calendar, MapPin, Camera, X, Power, Trash2, Edit, Plus, Eye, Monitor } from 'lucide-react';
 import Modal from '../components/Modal';
 
 const HijackBookings = () => {
@@ -13,7 +13,7 @@ const HijackBookings = () => {
   const [toggling, setToggling] = useState(false);
   
   const [selectedBooking, setSelectedBooking] = useState(null);
-  const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
   // Force Book State
   const [isForceBookModalOpen, setIsForceBookModalOpen] = useState(false);
@@ -254,11 +254,9 @@ const HijackBookings = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse" style={{ background: 'rgba(255,255,255,0.03)' }}>
                 <thead>
-                  <tr>
-                    {['Student', 'Enrollment', 'Classroom', 'Seat', 'Date', 'Evidence', 'Overrides'].map((h) => (
+                    {['Student', 'Enrollment', 'Classroom', 'Seat', 'Date', 'Actions', 'Overrides'].map((h) => (
                       <th key={h} style={thStyle}>{h}</th>
                     ))}
-                  </tr>
                 </thead>
                 <tbody>
                   {filteredBookings.map((booking) => (
@@ -296,19 +294,18 @@ const HijackBookings = () => {
                           {formatDate(booking.bookedAt)}
                         </span>
                       </td>
-                      
-                      {/* Evidence Column */}
+                      {/* Actions Column */}
                       <td style={tdStyle}>
-                        <button 
-                          onClick={() => { setSelectedBooking(booking); setIsEvidenceModalOpen(true); }}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
-                          style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)', color: '#a78bfa' }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(124,58,237,0.25)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(124,58,237,0.15)'; }}
-                        >
-                          <Camera className="w-3.5 h-3.5" />
-                          View
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => { setSelectedBooking(booking); setIsAuditModalOpen(true); }}
+                            className="p-2 rounded-xl transition-all"
+                            style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(249,202,58,0.15)'; e.currentTarget.style.color = '#f9ca3a'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
+                            title="View Audit Record">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
 
                       {/* Admin Overrides */}
@@ -461,70 +458,57 @@ const HijackBookings = () => {
         )}
       </Modal>
 
-      {/* Evidence Modal */}
-      <Modal isOpen={isEvidenceModalOpen} onClose={() => setIsEvidenceModalOpen(false)} title="Booking Evidence">
+      {/* Audit Modal */}
+      <Modal isOpen={isAuditModalOpen} onClose={() => setIsAuditModalOpen(false)} title="Booking Audit Record">
         {selectedBooking && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 rounded-2xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              <div>
-                <p className="text-white font-bold">{selectedBooking.studentId?.name}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>{selectedBooking.studentId?.enrollmentNo}</p>
-              </div>
-              <div className="text-right">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold"
-                  style={{ background: 'rgba(249,202,58,0.1)', border: '1px solid rgba(249,202,58,0.2)', color: '#f9ca3a' }}>
-                  <Armchair className="w-3.5 h-3.5" /> Seat {selectedBooking.seatNumber}
-                </span>
-                <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{selectedBooking.classroomId?.name}</p>
-              </div>
-            </div>
-
-            {/* Photo */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#a78bfa' }}>Identity Verification Photo</p>
-              {selectedBooking.photoUrl ? (
-                <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <img src={selectedBooking.photoUrl} alt="Student Verification" className="w-full h-auto object-cover" />
+            <div className="flex gap-4">
+              <div className="flex-1 space-y-4">
+                <div className="p-4 rounded-2xl" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Student Details</p>
+                  <p className="text-sm text-white font-bold">{selectedBooking.studentId?.name}</p>
+                  <p className="text-xs text-neutral-400">{selectedBooking.studentId?.email}</p>
                 </div>
-              ) : (
-                <div className="p-8 text-center rounded-2xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed rgba(255,255,255,0.1)' }}>
-                  <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No photo was captured for this legacy booking.</p>
+                
+                <div className="p-4 rounded-2xl" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Security Checks</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Monitor className="w-4 h-4" style={{ color: '#f9ca3a' }} />
+                      <span className="text-neutral-400">IP:</span>
+                      <span className="text-white font-mono">{selectedBooking.ipAddress || 'Unknown'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <MapPin className="w-4 h-4" style={{ color: '#f9ca3a' }} />
+                      <span className="text-neutral-400">Geo:</span>
+                      <span className="text-white font-mono">{selectedBooking.latitude}, {selectedBooking.longitude}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Eye className="w-4 h-4" style={{ color: '#f9ca3a' }} />
+                      <span className="text-neutral-400">Face Match:</span>
+                      <span className={selectedBooking.faceMatchStatus ? "text-green-400" : "text-red-400"}>
+                        {selectedBooking.faceMatchStatus ? 'Passed' : 'Failed'} ({selectedBooking.faceConfidenceScore ? (selectedBooking.faceConfidenceScore * 100).toFixed(1) + '%' : 'N/A'})
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Location */}
-            <div>
-              <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#a78bfa' }}>Geolocation Details</p>
-              <div className="p-4 rounded-2xl space-y-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                {selectedBooking.latitude && selectedBooking.longitude ? (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Coordinates:</span>
-                      <span className="text-xs font-mono text-white">{selectedBooking.latitude.toFixed(6)}, {selectedBooking.longitude.toFixed(6)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>IP Address:</span>
-                      <span className="text-xs font-mono text-white">{selectedBooking.ipAddress || 'Unknown'}</span>
-                    </div>
-                    <a 
-                      href={`https://www.google.com/maps?q=${selectedBooking.latitude},${selectedBooking.longitude}`} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all"
-                      style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(16,185,129,0.25)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(16,185,129,0.15)'; }}
-                    >
-                      <MapPin className="w-3.5 h-3.5" />
-                      View on Google Maps
-                    </a>
-                  </>
+              <div className="w-48 shrink-0">
+                <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Live Capture</p>
+                {selectedBooking.photoUrl ? (
+                  <img src={selectedBooking.photoUrl} alt="Captured at booking" className="w-full h-auto rounded-xl object-cover border border-neutral-700/50" />
                 ) : (
-                  <p className="text-sm text-center py-2" style={{ color: 'rgba(255,255,255,0.3)' }}>Location data missing for this booking.</p>
+                  <div className="w-full aspect-[3/4] rounded-xl flex items-center justify-center bg-neutral-900 border border-neutral-800">
+                    <span className="text-xs text-neutral-500">No Photo</span>
+                  </div>
                 )}
               </div>
             </div>
+
+            <button onClick={() => setIsAuditModalOpen(false)} className="w-full py-3 rounded-xl text-sm font-bold bg-neutral-800 text-white hover:bg-neutral-700 transition-colors">
+              Close Audit
+            </button>
           </div>
         )}
       </Modal>
