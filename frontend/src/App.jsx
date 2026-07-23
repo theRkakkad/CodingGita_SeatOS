@@ -193,16 +193,6 @@ const App = () => {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/master/audit-logs"
-            element={
-              <ProtectedRoute adminOnly>
-                <MainLayout>
-                  <AdminAuditLogs />
-                </MainLayout>
-              </ProtectedRoute>
-            }
-          />
 
           {/* Student Info Portal Protected Routes */}
           <Route
@@ -231,6 +221,16 @@ const App = () => {
               <ProtectedRoute infoAdminOnly>
                 <InfoLayout>
                   <StudentInfoProfile />
+                </InfoLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/studentinfo/audit-logs"
+            element={
+              <ProtectedRoute infoAdminOnly>
+                <InfoLayout>
+                  <AdminAuditLogs />
                 </InfoLayout>
               </ProtectedRoute>
             }

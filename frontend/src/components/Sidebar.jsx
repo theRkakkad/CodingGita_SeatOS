@@ -32,7 +32,7 @@ const Sidebar = () => {
     { to: '/master/bookings', label: 'Seat Bookings', icon: ClipboardList },
     { to: '/master/students', label: 'Students', icon: Users },
     { to: '/master/search', label: 'Search Student', icon: Search },
-    { to: '/master/audit-logs', label: 'Security Audit', icon: Shield },
+    { to: '/master/settings', label: 'Settings', icon: Settings },
   ];
 
   const links = isAdmin ? adminLinks : studentLinks;

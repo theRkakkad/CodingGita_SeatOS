@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard, Armchair, Ticket, User, LogOut,
-  School, ClipboardList, Users, Search,
+  School, ClipboardList, Users, Search, Shield
 } from 'lucide-react';
 import FaceIdModal from './FaceIdModal';
 
@@ -18,6 +18,7 @@ const InfoSidebar = () => {
     { to: '/studentinfo/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/studentinfo/booked-seats', label: 'Booked Seats', icon: ClipboardList },
     { to: '/studentinfo/profile', label: 'Profile', icon: User },
+    { to: '/studentinfo/audit-logs', label: 'Security Audit', icon: Shield },
   ];
 
   const links = infoAdminLinks;
