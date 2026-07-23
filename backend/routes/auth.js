@@ -544,7 +544,26 @@ router.post('/refresh', async (req, res) => {
       .json({ success: true, csrfToken });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: 'Server error during refresh' });
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @desc    Get current user's login history
+// @route   GET /api/auth/my-logins
+// @access  Private
+router.get('/my-logins', protect, async (req, res) => {
+  try {
+    const logs = await LoginLog.find({ userId: req.user.id })
+      .sort({ timestamp: -1 })
+      .limit(10); // Return last 10 logins
+
+    res.json({
+      success: true,
+      logs
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Server error fetching login history' });
   }
 });
 

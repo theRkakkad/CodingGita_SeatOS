@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard, Armchair, Ticket, User, LogOut,
-  School, ClipboardList, Users, Search,
+  School, ClipboardList, Users, Search, Shield,
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -32,6 +32,7 @@ const Sidebar = () => {
     { to: '/master/bookings', label: 'Seat Bookings', icon: ClipboardList },
     { to: '/master/students', label: 'Students', icon: Users },
     { to: '/master/search', label: 'Search Student', icon: Search },
+    { to: '/master/audit-logs', label: 'Security Audit', icon: Shield },
   ];
 
   const links = isAdmin ? adminLinks : studentLinks;

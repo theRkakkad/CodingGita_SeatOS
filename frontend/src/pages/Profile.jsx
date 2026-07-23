@@ -1,5 +1,5 @@
-import React from 'react';
 import Navbar from '../components/Navbar';
+import SecurityCenter from '../components/SecurityCenter';
 import { useAuth } from '../context/AuthContext';
 import { User, Mail, Hash, Shield, BookOpen, Star } from 'lucide-react';
 
@@ -89,6 +89,8 @@ const Profile = () => {
                 </div>
               ))}
             </div>
+
+            <SecurityCenter />
 
             {/* Portal Badge */}
             <div className="mt-6 p-4 rounded-2xl flex items-center gap-4"

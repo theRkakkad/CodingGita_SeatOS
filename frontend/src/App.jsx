@@ -20,6 +20,7 @@ import AdminClassroomView from './pages/AdminClassroomView';
 import AdminBookings from './pages/AdminBookings';
 import AdminStudents from './pages/AdminStudents';
 import AdminSearchStudent from './pages/AdminSearchStudent';
+import AdminAuditLogs from './pages/AdminAuditLogs';
 import NotFound from './pages/NotFound';
 import StudentInfoLogin from './pages/StudentInfoLogin';
 import StudentInfoDashboard from './pages/StudentInfoDashboard';
@@ -188,6 +189,16 @@ const App = () => {
               <ProtectedRoute adminOnly>
                 <MainLayout>
                   <AdminSearchStudent />
+                </MainLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/master/audit-logs"
+            element={
+              <ProtectedRoute adminOnly>
+                <MainLayout>
+                  <AdminAuditLogs />
                 </MainLayout>
               </ProtectedRoute>
             }
