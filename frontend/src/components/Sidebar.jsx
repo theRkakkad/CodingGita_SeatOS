@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard, Armchair, Ticket, User, LogOut,
-  School, ClipboardList, Users, Search,
+  School, ClipboardList, Users, Search, Shield,
 } from 'lucide-react';
 
 const Sidebar = () => {

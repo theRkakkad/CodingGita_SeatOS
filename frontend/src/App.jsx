@@ -20,6 +20,7 @@ import AdminClassroomView from './pages/AdminClassroomView';
 import AdminBookings from './pages/AdminBookings';
 import AdminStudents from './pages/AdminStudents';
 import AdminSearchStudent from './pages/AdminSearchStudent';
+import AdminAuditLogs from './pages/AdminAuditLogs';
 import NotFound from './pages/NotFound';
 import StudentInfoLogin from './pages/StudentInfoLogin';
 import StudentInfoDashboard from './pages/StudentInfoDashboard';
@@ -221,6 +222,16 @@ const App = () => {
                 <InfoLayout>
                   <StudentInfoProfile />
                 </InfoLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/systemhijacking/audit-logs"
+            element={
+              <ProtectedRoute infoAdminOnly>
+                <HijackLayout>
+                  <AdminAuditLogs />
+                </HijackLayout>
               </ProtectedRoute>
             }
           />

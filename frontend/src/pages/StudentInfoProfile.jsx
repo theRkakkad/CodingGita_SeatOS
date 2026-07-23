@@ -1,5 +1,5 @@
-import React from 'react';
 import Navbar from '../components/Navbar';
+import SecurityCenter from '../components/SecurityCenter';
 import { useAuth } from '../context/AuthContext';
 import { User, Mail, Hash, Shield, BookOpen, Star } from 'lucide-react';
 

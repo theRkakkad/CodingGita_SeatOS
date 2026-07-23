@@ -28,6 +28,7 @@ const loginSchema = z.object({
 
 const googleSchema = z.object({
   idToken: z.string().min(1, "Please provide Google idToken"),
+  turnstileToken: z.string().min(1, "Please complete the CAPTCHA security check"),
 });
 
 // Generate JWT Helper
@@ -281,7 +282,25 @@ router.post('/google', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
     }
-    const { idToken } = parsed.data;
+    const { idToken, turnstileToken } = parsed.data;
+
+    // Verify Cloudflare Turnstile CAPTCHA
+    const turnstileSecret = '1x0000000000000000000000000000000AA'; // Dummy key for always passes
+    const turnstileVerifyURL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+    
+    // We use the native fetch API (Node 18+)
+    const turnstileRes = await fetch(turnstileVerifyURL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `secret=${turnstileSecret}&response=${turnstileToken}`,
+    });
+    
+    const turnstileOutcome = await turnstileRes.json();
+    if (!turnstileOutcome.success) {
+      return res.status(403).json({ success: false, message: 'CAPTCHA verification failed. Are you a bot?' });
+    }
 
     // Verify Google Token strictly (NO MOCKS)
     const ticket = await client.verifyIdToken({
@@ -525,7 +544,26 @@ router.post('/refresh', async (req, res) => {
       .json({ success: true, csrfToken });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: 'Server error during refresh' });
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// @desc    Get current user's login history
+// @route   GET /api/auth/my-logins
+// @access  Private
+router.get('/my-logins', protect, async (req, res) => {
+  try {
+    const logs = await LoginLog.find({ userId: req.user.id })
+      .sort({ timestamp: -1 })
+      .limit(10); // Return last 10 logins
+
+    res.json({
+      success: true,
+      logs
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Server error fetching login history' });
   }
 });
 

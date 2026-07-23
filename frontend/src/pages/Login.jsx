@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AlertCircle } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 const Login = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState(null);
 
   const {
     googleLogin,
@@ -43,7 +45,8 @@ const Login = () => {
 
       // Send Google ID token to backend
       const result = await googleLogin(
-        credentialResponse.credential
+        credentialResponse.credential,
+        turnstileToken
       );
 
       if (result?.success) {
@@ -228,6 +231,16 @@ const Login = () => {
 
             {/* Google Login */}
             <div className="space-y-5 flex flex-col items-center pt-2">
+              
+              {!turnstileToken && (
+                <div className="mb-4">
+                  <Turnstile 
+                    siteKey="1x00000000000000000000AA" // Cloudflare dummy key for always passes
+                    onSuccess={(token) => setTurnstileToken(token)} 
+                    theme="dark"
+                  />
+                </div>
+              )}
 
               {isLoading ? (
                 <div
@@ -239,14 +252,21 @@ const Login = () => {
                   Signing in...
                 </div>
               ) : (
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={handleGoogleError}
-                  theme="filled_black"
-                  size="large"
-                  shape="pill"
-                  width="350"
-                />
+                <div style={{ opacity: turnstileToken ? 1 : 0.5, pointerEvents: turnstileToken ? 'auto' : 'none' }}>
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={handleGoogleError}
+                    theme="filled_black"
+                    size="large"
+                    shape="pill"
+                    width="350"
+                  />
+                  {!turnstileToken && (
+                    <p className="text-xs text-center mt-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      Please complete the security check to sign in.
+                    </p>
+                  )}
+                </div>
               )}
 
               {/* University Email Information */}

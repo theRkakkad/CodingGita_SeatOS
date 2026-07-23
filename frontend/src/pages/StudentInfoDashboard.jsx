@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import api from '../services/api';
 import { socket } from '../services/socket';
@@ -8,6 +9,8 @@ const StudentInfoDashboard = () => {
   const [students, setStudents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const isHijack = location.pathname.includes('systemhijacking');
 
   const fetchStudents = async () => {
     try {
@@ -110,15 +113,24 @@ const StudentInfoDashboard = () => {
                       </td>
                       <td style={tdStyle}>
                         {student.booking ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold"
-                            style={{ background: 'rgba(249,202,58,0.1)', border: '1px solid rgba(249,202,58,0.2)', color: '#f9ca3a', whiteSpace: 'nowrap' }}>
-                            <Armchair className="w-3.5 h-3.5" />
-                            {student.booking.classroomName} – Seat {student.booking.seatNumber}
-                          </span>
+                          isHijack ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold"
+                              style={{ background: 'rgba(249,202,58,0.1)', border: '1px solid rgba(249,202,58,0.2)', color: '#f9ca3a', whiteSpace: 'nowrap' }}>
+                              <Armchair className="w-3.5 h-3.5" />
+                              {student.booking.classroomName} – Seat {student.booking.seatNumber}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold"
+                              style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e', whiteSpace: 'nowrap' }}>
+                              <Armchair className="w-3.5 h-3.5" />
+                              Booked
+                            </span>
+                          )
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold"
-                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap' }}>
-                            <HelpCircle className="w-3.5 h-3.5" />No Seat Booked
+                            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', whiteSpace: 'nowrap' }}>
+                            <HelpCircle className="w-3.5 h-3.5" />
+                            Not Booked
                           </span>
                         )}
                       </td>
