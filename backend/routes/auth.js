@@ -13,6 +13,32 @@ const { z } = require('zod');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+// Network Info Helper for better localhost/public IP resolution
+const resolveNetworkInfo = async (req) => {
+  let ipAddress = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
+  ipAddress = ipAddress.includes(',') ? ipAddress.split(',')[0].trim() : ipAddress.trim();
+  
+  if (ipAddress === '::1' || ipAddress === '127.0.0.1') {
+    try {
+      // For local development, fetch the machine's actual public IP
+      const ipRes = await fetch('https://api.ipify.org?format=json');
+      const ipData = await ipRes.json();
+      ipAddress = ipData.ip;
+    } catch (e) {
+      console.log('Public IP lookup fallback failed');
+    }
+  }
+
+  const geo = geoip.lookup(ipAddress);
+  const location = {
+    country: geo?.country || 'Unknown',
+    region: geo?.region || 'Unknown',
+    city: geo?.city || 'Unknown'
+  };
+
+  return { ipAddress, location };
+};
+
 // Zod Validation Schemas
 const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -216,15 +242,10 @@ router.post('/login', async (req, res) => {
     const { email, password } = parsed.data;
 
     // IP & Geolocation info extraction
-    const rawIp = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
-    const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+    const networkInfo = await resolveNetworkInfo(req);
+    const ipAddress = networkInfo.ipAddress;
+    const location = networkInfo.location;
     const userAgent = req.headers['user-agent'] || '';
-    const geo = geoip.lookup(ipAddress);
-    const location = {
-      country: geo?.country || 'Localhost',
-      region: geo?.region || 'Localhost',
-      city: geo?.city || 'Localhost'
-    };
 
     // Check for user
     const user = await User.findOne({ email }).select('+password');

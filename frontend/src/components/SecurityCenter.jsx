@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Shield, Clock, MapPin, Globe, CheckCircle2, XCircle } from 'lucide-react';
 import api from '../services/api';
+import { UAParser } from 'ua-parser-js';
 
 const SecurityCenter = () => {
   const [logs, setLogs] = useState([]);
@@ -103,10 +104,16 @@ const SecurityCenter = () => {
                 </div>
 
                 <div className="sm:text-right pl-12 sm:pl-0">
-                  <div className="text-xs text-white/30 truncate max-w-[200px]" title={log.userAgent}>
-                    {log.userAgent ? (log.userAgent.includes('Chrome') ? 'Chrome' : 
-                                    log.userAgent.includes('Firefox') ? 'Firefox' : 
-                                    log.userAgent.includes('Safari') ? 'Safari' : 'Unknown Browser') : 'Unknown Device'}
+                  <div className="text-xs text-white/70 whitespace-normal break-words max-w-[200px]" title={log.userAgent}>
+                    {(() => {
+                      const parser = new UAParser(log.userAgent);
+                      const browser = parser.getBrowser();
+                      const os = parser.getOS();
+                      if (browser.name && os.name) {
+                        return `${browser.name} ${browser.version || ''} on ${os.name} ${os.version || ''}`.trim();
+                      }
+                      return log.userAgent || 'Unknown Device';
+                    })()}
                   </div>
                 </div>
               </div>
