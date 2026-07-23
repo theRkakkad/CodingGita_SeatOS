@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Navbar from '../components/Navbar';
 import api from '../services/api';
 import { socket } from '../services/socket';
-import { ClipboardList, Search, School, Armchair, Calendar, MapPin, Camera, X } from 'lucide-react';
+import { ClipboardList, Search, School, Armchair, Calendar, MapPin, Camera, X, Eye, Monitor } from 'lucide-react';
 import Modal from '../components/Modal';
 
 const StudentInfoBookings = () => {
@@ -10,6 +10,12 @@ const StudentInfoBookings = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+
+  const handleOpenAuditModal = (booking) => {
+    setSelectedBooking(booking);
+    setIsAuditModalOpen(true);
+  };
 
   const fetchBookings = async () => {
     try {
@@ -77,7 +83,7 @@ const StudentInfoBookings = () => {
               <table className="w-full text-left border-collapse" style={{ background: 'rgba(255,255,255,0.03)' }}>
                 <thead>
                   <tr>
-                    {['Student', 'Enrollment No', 'Classroom', 'Seat', 'Date & Time'].map((h) => (
+                    {['Student', 'Enrollment No', 'Classroom', 'Seat', 'Date & Time', 'Actions'].map((h) => (
                       <th key={h} style={thStyle}>{h}</th>
                     ))}
                   </tr>
@@ -118,6 +124,18 @@ const StudentInfoBookings = () => {
                           {formatDate(booking.bookedAt)}
                         </span>
                       </td>
+                      <td style={tdStyle}>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => handleOpenAuditModal(booking)}
+                            className="p-2 rounded-xl transition-all"
+                            style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(249,202,58,0.15)'; e.currentTarget.style.color = '#f9ca3a'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
+                            title="View Audit Record">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -138,6 +156,61 @@ const StudentInfoBookings = () => {
           )}
         </div>
       </main>
+
+      {/* Audit Modal */}
+      <Modal isOpen={isAuditModalOpen} onClose={() => setIsAuditModalOpen(false)} title="Booking Audit Record">
+        {selectedBooking && (
+          <div className="space-y-6">
+            <div className="flex gap-4">
+              <div className="flex-1 space-y-4">
+                <div className="p-4 rounded-2xl" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Student Details</p>
+                  <p className="text-sm text-white font-bold">{selectedBooking.studentId?.name}</p>
+                  <p className="text-xs text-neutral-400">{selectedBooking.studentId?.email}</p>
+                </div>
+                
+                <div className="p-4 rounded-2xl" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Security Checks</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Monitor className="w-4 h-4" style={{ color: '#f9ca3a' }} />
+                      <span className="text-neutral-400">IP:</span>
+                      <span className="text-white font-mono">{selectedBooking.ipAddress || 'Unknown'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <MapPin className="w-4 h-4" style={{ color: '#f9ca3a' }} />
+                      <span className="text-neutral-400">Geo:</span>
+                      <span className="text-white font-mono">{selectedBooking.latitude}, {selectedBooking.longitude}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Eye className="w-4 h-4" style={{ color: '#f9ca3a' }} />
+                      <span className="text-neutral-400">Face Match:</span>
+                      <span className={selectedBooking.faceMatchStatus ? "text-green-400" : "text-red-400"}>
+                        {selectedBooking.faceMatchStatus ? 'Passed' : 'Failed'} ({selectedBooking.faceConfidenceScore ? (selectedBooking.faceConfidenceScore * 100).toFixed(1) + '%' : 'N/A'})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-48 shrink-0">
+                <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Live Capture</p>
+                {selectedBooking.photoUrl ? (
+                  <img src={selectedBooking.photoUrl} alt="Captured at booking" className="w-full h-auto rounded-xl object-cover border border-neutral-700/50" />
+                ) : (
+                  <div className="w-full aspect-[3/4] rounded-xl flex items-center justify-center bg-neutral-900 border border-neutral-800">
+                    <span className="text-xs text-neutral-500">No Photo</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <button onClick={() => setIsAuditModalOpen(false)} className="w-full py-3 rounded-xl text-sm font-bold bg-neutral-800 text-white hover:bg-neutral-700 transition-colors">
+              Close Audit
+            </button>
+          </div>
+        )}
+      </Modal>
 
     </div>
   );
