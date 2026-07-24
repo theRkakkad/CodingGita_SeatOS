@@ -12,7 +12,6 @@ const Login = () => {
 
   const {
     googleLogin,
-    devLogin,
     logout,
     isAuthenticated,
     isAdmin,
@@ -88,30 +87,6 @@ const Login = () => {
     );
   };
 
-  // Handle Developer Login
-  const handleDevLogin = async () => {
-    setError('');
-    setIsLoading(true);
-
-    try {
-      const result = await devLogin(
-        'devstudent@gmail.com',
-        'student'
-      );
-
-      if (!result?.success) {
-        setError(
-          result?.message || 'Dev login failed.'
-        );
-      }
-    } catch (err) {
-      console.error('Dev Login Error:', err);
-
-      setError('Dev login failed.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div
@@ -280,26 +255,6 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Developer Login Bypass */}
-            {import.meta.env.DEV && (
-              <div className="mt-6 pt-6 border-t border-white/10">
-
-                <p className="text-xs text-center text-white/40 mb-3">
-                  Developer Bypass (Local Only)
-                </p>
-
-                <button
-                  onClick={handleDevLogin}
-                  disabled={isLoading}
-                  className="w-full py-2.5 rounded-xl text-sm font-bold bg-neutral-800 text-white hover:bg-neutral-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoading
-                    ? 'Logging in...'
-                    : 'Dev Login (as Student)'}
-                </button>
-
-              </div>
-            )}
 
           </div>
         </div>

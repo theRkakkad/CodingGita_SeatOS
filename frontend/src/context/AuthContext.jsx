@@ -87,26 +87,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Developer Bypass Login
-  const devLogin = async (email, role) => {
-    try {
-      const res = await api.post('/api/auth/dev-login', { email, role });
-      if (res.data.success) {
-        if (res.data.csrfToken) {
-          localStorage.setItem('csrfToken', res.data.csrfToken);
-        }
-        setUser(res.data.user);
-        connectSocket();
-        return { success: true, user: res.data.user };
-      }
-    } catch (err) {
-      return {
-        success: false,
-        message: err.response?.data?.message || 'Dev login failed.',
-      };
-    }
-  };
-
   // Register handler
   const register = async (name, enrollmentNo, email, password) => {
     try {
@@ -152,7 +132,6 @@ export const AuthProvider = ({ children }) => {
         login,
         googleLogin,
         infoAdminGoogleLogin,
-        devLogin,
         register,
         logout,
         isAuthenticated: !!user,

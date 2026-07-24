@@ -619,34 +619,6 @@ router.post('/logout', async (req, res) => {
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
-// @desc    Developer Bypass Login (For local development only)
-// @route   POST /api/auth/dev-login
-// @access  Public
-router.post('/dev-login', async (req, res) => {
-  try {
-    const { email, role } = req.body;
-    let user = await User.findOne({ email });
-    
-    if (!user) {
-      // Create user if not exists
-      const enrollmentNo = email.split('@')[0].toUpperCase();
-      user = await User.create({
-        name: 'Dev User',
-        email,
-        enrollmentNo,
-        password: 'OAUTH_USER',
-        role: role || 'student',
-      });
-    } else if (role && user.role !== role) {
-      user.role = role;
-      await user.save();
-    }
 
-    await sendTokenCookie(user, 200, res, req);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Dev login failed' });
-  }
-});
 
 module.exports = router;
