@@ -29,8 +29,8 @@ connectDB().then(async () => {
 const app = express();
 const server = http.createServer(app);
 
-// Trust proxy for retrieving correct client IPs
-app.set('trust proxy', true);
+// Trust proxy for retrieving correct client IPs (Set to 1 for Cloudflare/Vercel)
+app.set('trust proxy', 1);
 
 // Set secure headers with Helmet (Customized to avoid breaking OAuth)
 app.use(helmet({
