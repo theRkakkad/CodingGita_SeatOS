@@ -7,7 +7,7 @@ import { GoogleLogin } from '@react-oauth/google';
 const StudentInfoLogin = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { infoAdminGoogleLogin, devLogin, logout, isAuthenticated, isInfoAdmin } = useAuth();
+  const { infoAdminGoogleLogin, logout, isAuthenticated, isInfoAdmin } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -88,24 +88,7 @@ const StudentInfoLogin = () => {
               </div>
             </div>
 
-            {/* Dev Login Bypass */}
-            {import.meta.env.DEV && (
-              <div className="mt-6 pt-6 border-t border-white/10">
-                <p className="text-xs text-center text-white/40 mb-3">Developer Bypass (Local Only)</p>
-                <button
-                  onClick={async () => {
-                    setError(''); setIsLoading(true);
-                    const res = await devLogin('zeelkundariya13@gmail.com', 'info_admin');
-                    setIsLoading(false);
-                    if (!res.success) setError(res.message);
-                  }}
-                  disabled={isLoading}
-                  className="w-full py-2.5 rounded-xl text-sm font-bold bg-neutral-800 text-white hover:bg-neutral-700 transition-colors"
-                >
-                  {isLoading ? 'Logging in...' : 'Dev Login (as Zeel)'}
-                </button>
-              </div>
-            )}
+
           </div>
         </div>
       </div>
