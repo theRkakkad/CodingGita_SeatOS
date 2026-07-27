@@ -9,7 +9,6 @@ const jwt = require('jsonwebtoken');
 const geoip = require('geoip-lite');
 const User = require('../models/User');
 const Session = require('../models/Session');
-const crypto = require('crypto');
 const LoginLog = require('../models/LoginLog');
 const { protect, authorize } = require('../middleware/auth');
 const sendEmail = require('../utils/sendEmail');
