@@ -105,13 +105,9 @@ const FaceIdModal = ({ isOpen, onClose }) => {
     const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
 
     if (bestMatch.label === 'authorized_admin' && (user.email === 'zeelkundariya13@gmail.com' || user.email === 'kakkadrachit1@gmail.com')) {
-      // Phase 1 Success: Move to Phase 2 (Passcode)
-      isScanningRef.current = false;
-      setScanStatus('awaiting_passcode');
-      setScanMessage('Identity verified. Enter Override Code.');
-      setTimeout(() => {
-        if(passcodeRef.current) passcodeRef.current.focus();
-      }, 100);
+      // Phase 1.5: Liveness Detection
+      setScanStatus('liveness_check');
+      setScanMessage('Identity Verified. Liveness Check: Turn head RIGHT.');
     } else {
       setScanStatus('failed');
       setScanMessage('ACCESS DENIED: Unrecognized Face');
@@ -125,9 +121,49 @@ const FaceIdModal = ({ isOpen, onClose }) => {
     }
   };
 
+  const performLivenessCheck = async () => {
+    if (!isScanningRef.current || scanStatus !== 'liveness_check') return;
+    if (!webcamRef.current || !webcamRef.current.video || webcamRef.current.video.readyState !== 4) {
+      if (isScanningRef.current) setTimeout(performLivenessCheck, 250);
+      return;
+    }
+    
+    const video = webcamRef.current.video;
+    const detection = await faceapi.detectSingleFace(video).withFaceLandmarks();
+    
+    if (!detection) {
+      setScanMessage('Face lost. Keep your face in frame.');
+      if (isScanningRef.current) setTimeout(performLivenessCheck, 250);
+      return;
+    }
+
+    const landmarks = detection.landmarks.positions;
+    const noseTip = landmarks[30];
+    const leftEdge = landmarks[0];
+    const rightEdge = landmarks[16];
+
+    const leftDist = Math.abs(noseTip.x - leftEdge.x);
+    const rightDist = Math.abs(rightEdge.x - noseTip.x);
+    
+    const ratio = leftDist / rightDist;
+
+    if (ratio < 0.6) {
+      setScanStatus('awaiting_passcode');
+      setScanMessage('Liveness Verified. Enter Override Code.');
+      setTimeout(() => {
+        if(passcodeRef.current) passcodeRef.current.focus();
+      }, 100);
+    } else {
+      setScanMessage('Prove you are human: Turn your head slowly to the RIGHT.');
+      if (isScanningRef.current) setTimeout(performLivenessCheck, 250);
+    }
+  };
+
   useEffect(() => {
     if (scanStatus === 'scanning' && isModelLoaded) {
       scanFace();
+    } else if (scanStatus === 'liveness_check' && isModelLoaded) {
+      performLivenessCheck();
     }
   }, [scanStatus, isModelLoaded]);
 
