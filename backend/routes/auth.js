@@ -59,8 +59,8 @@ const googleSchema = z.object({
 });
 
 // Generate JWT Helper
-const generateAccessToken = (id, ipHash) => {
-  return jwt.sign({ id, ipHash }, process.env.JWT_SECRET, {
+const generateAccessToken = (id, ipHash, tokenVersion) => {
+  return jwt.sign({ id, ipHash, tokenVersion }, process.env.JWT_SECRET, {
     expiresIn: '5m', // Short-lived Access Token
   });
 };
@@ -71,7 +71,7 @@ const sendTokenCookie = async (user, statusCode, res, req) => {
   const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
   const ipHash = crypto.createHash('sha256').update(ipAddress).digest('hex');
 
-  const accessToken = generateAccessToken(user._id, ipHash);
+  const accessToken = generateAccessToken(user._id, ipHash, user.tokenVersion || 0);
   const refreshToken = crypto.randomBytes(40).toString('hex');
   const userAgent = req?.headers?.['user-agent'] || '';
   const geo = geoip.lookup(ipAddress);
@@ -558,7 +558,7 @@ router.post('/refresh', async (req, res) => {
     const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
     const ipHash = crypto.createHash('sha256').update(ipAddress).digest('hex');
 
-    const newAccessToken = generateAccessToken(user._id, ipHash);
+    const newAccessToken = generateAccessToken(user._id, ipHash, user.tokenVersion || 0);
 
     const cookieOptionsAccess = {
       expires: new Date(Date.now() + 5 * 60 * 1000),

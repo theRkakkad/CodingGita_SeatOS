@@ -1080,4 +1080,25 @@ router.get('/login-logs', async (req, res) => {
   }
 });
 
+// @desc    Suspend user and instantly revoke all active sessions (Kill Switch)
+// @route   POST /api/master/suspend-user/:id
+// @access  Private (Admin)
+router.post('/suspend-user/:id', async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Incrementing tokenVersion mathematically invalidates all previously issued JWTs instantly
+    targetUser.tokenVersion = (targetUser.tokenVersion || 0) + 1;
+    await targetUser.save();
+
+    res.json({ success: true, message: `All active sessions for ${targetUser.email} have been instantly terminated.` });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Server error revoking sessions' });
+  }
+});
+
 module.exports = router;

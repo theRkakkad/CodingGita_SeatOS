@@ -58,6 +58,12 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Not authorized, user not found' });
     }
 
+    // Token Version (Kill Switch) Check
+    if (decoded.tokenVersion !== undefined && req.user.tokenVersion !== decoded.tokenVersion) {
+      console.warn(`[SECURITY ALERT] Token Version Mismatch! Session revoked | Expected: ${req.user.tokenVersion} | Got: ${decoded.tokenVersion}`);
+      return res.status(401).json({ success: false, message: 'Session revoked. Please login again.' });
+    }
+
     next();
   } catch (error) {
     console.error(`[AUTH ERROR] ${error.name}: ${error.message} | IP: ${clientIp} | Path: ${req.originalUrl} | UA: ${req.headers['user-agent']}`);
