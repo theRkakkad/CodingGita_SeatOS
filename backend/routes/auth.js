@@ -78,8 +78,39 @@ const sendTokenCookie = async (user, statusCode, res, req) => {
   const location = {
     country: geo?.country || 'Localhost',
     region: geo?.region || 'Localhost',
-    city: geo?.city || 'Localhost'
+    city: geo?.city || 'Localhost',
+    ll: geo?.ll || []
   };
+
+  // Helper for Impossible Travel
+  const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; 
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2); 
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))); 
+  };
+
+  // Impossible Travel Anomaly Detection
+  if (location.ll && location.ll.length === 2) {
+    const lastLogin = await LoginLog.findOne({ userId: user._id, success: true }).sort({ timestamp: -1 });
+    if (lastLogin && lastLogin.location && lastLogin.location.ll && lastLogin.location.ll.length === 2) {
+      const distance = getDistanceFromLatLonInKm(lastLogin.location.ll[0], lastLogin.location.ll[1], location.ll[0], location.ll[1]);
+      const hoursDiff = (Date.now() - new Date(lastLogin.timestamp).getTime()) / (1000 * 60 * 60);
+      
+      if (hoursDiff > 0 && distance > 100) {
+        const speed = distance / hoursDiff; // km/h
+        if (speed > 1000) {
+          console.warn(`[SECURITY ALERT] Impossible Travel Detected! Speed: ${speed.toFixed(2)} km/h | User: ${user.email}`);
+          user.tokenVersion = (user.tokenVersion || 0) + 1;
+          await user.save();
+          return res.status(401).json({ success: false, message: 'Account locked due to impossible travel anomaly. Sessions revoked.' });
+        }
+      }
+    }
+  }
 
   // Advanced Device Fingerprinting with ua-parser-js
   const parser = new UAParser(userAgent);
