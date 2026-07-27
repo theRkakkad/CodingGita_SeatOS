@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const crypto = require('crypto');
 
 // Protect routes
 const protect = async (req, res, next) => {
@@ -42,12 +43,25 @@ const protect = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+    // IP Binding Check
+    const ipHash = crypto.createHash('sha256').update(clientIp).digest('hex');
+    if (decoded.ipHash && decoded.ipHash !== ipHash) {
+      console.warn(`[SECURITY ALERT] IP Binding Mismatch! Token stolen or IP changed | Expected: ${decoded.ipHash} | Got: ${ipHash}`);
+      return res.status(401).json({ success: false, message: 'Session IP mismatch. Please login again.' });
+    }
+
     // Get user from the token, exclude password
     req.user = await User.findById(decoded.id).select('-password');
     
     if (!req.user) {
       console.warn(`[AUTH WARN] User not found for token | IP: ${clientIp} | Path: ${req.originalUrl} | UA: ${req.headers['user-agent']}`);
       return res.status(401).json({ success: false, message: 'Not authorized, user not found' });
+    }
+
+    // Token Version (Kill Switch) Check
+    if (decoded.tokenVersion !== undefined && req.user.tokenVersion !== decoded.tokenVersion) {
+      console.warn(`[SECURITY ALERT] Token Version Mismatch! Session revoked | Expected: ${req.user.tokenVersion} | Got: ${decoded.tokenVersion}`);
+      return res.status(401).json({ success: false, message: 'Session revoked. Please login again.' });
     }
 
     next();

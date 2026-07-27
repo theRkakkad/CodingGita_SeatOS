@@ -22,6 +22,7 @@ const loginLogSchema = new mongoose.Schema({
     country: { type: String, default: 'Unknown' },
     region: { type: String, default: 'Unknown' },
     city: { type: String, default: 'Unknown' },
+    ll: [{ type: Number }], // [latitude, longitude]
   },
   success: {
     type: Boolean,

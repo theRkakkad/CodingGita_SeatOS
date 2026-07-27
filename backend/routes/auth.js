@@ -59,26 +59,58 @@ const googleSchema = z.object({
 });
 
 // Generate JWT Helper
-const generateAccessToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const generateAccessToken = (id, ipHash, tokenVersion) => {
+  return jwt.sign({ id, ipHash, tokenVersion }, process.env.JWT_SECRET, {
     expiresIn: '5m', // Short-lived Access Token
   });
 };
 
 const sendTokenCookie = async (user, statusCode, res, req) => {
-  const accessToken = generateAccessToken(user._id);
-  const refreshToken = crypto.randomBytes(40).toString('hex');
-  
   // IP & Geolocation info extraction
   const rawIp = req?.headers?.['x-forwarded-for'] || req?.ip || req?.connection?.remoteAddress || req?.socket?.remoteAddress || '127.0.0.1';
   const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+  const ipHash = crypto.createHash('sha256').update(ipAddress).digest('hex');
+
+  const accessToken = generateAccessToken(user._id, ipHash, user.tokenVersion || 0);
+  const refreshToken = crypto.randomBytes(40).toString('hex');
   const userAgent = req?.headers?.['user-agent'] || '';
   const geo = geoip.lookup(ipAddress);
   const location = {
     country: geo?.country || 'Localhost',
     region: geo?.region || 'Localhost',
-    city: geo?.city || 'Localhost'
+    city: geo?.city || 'Localhost',
+    ll: geo?.ll || []
   };
+
+  // Helper for Impossible Travel
+  const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; 
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2); 
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))); 
+  };
+
+  // Impossible Travel Anomaly Detection
+  if (location.ll && location.ll.length === 2) {
+    const lastLogin = await LoginLog.findOne({ userId: user._id, success: true }).sort({ timestamp: -1 });
+    if (lastLogin && lastLogin.location && lastLogin.location.ll && lastLogin.location.ll.length === 2) {
+      const distance = getDistanceFromLatLonInKm(lastLogin.location.ll[0], lastLogin.location.ll[1], location.ll[0], location.ll[1]);
+      const hoursDiff = (Date.now() - new Date(lastLogin.timestamp).getTime()) / (1000 * 60 * 60);
+      
+      if (hoursDiff > 0 && distance > 100) {
+        const speed = distance / hoursDiff; // km/h
+        if (speed > 1000) {
+          console.warn(`[SECURITY ALERT] Impossible Travel Detected! Speed: ${speed.toFixed(2)} km/h | User: ${user.email}`);
+          user.tokenVersion = (user.tokenVersion || 0) + 1;
+          await user.save();
+          return res.status(401).json({ success: false, message: 'Account locked due to impossible travel anomaly. Sessions revoked.' });
+        }
+      }
+    }
+  }
 
   // Advanced Device Fingerprinting with ua-parser-js
   const parser = new UAParser(userAgent);
@@ -552,9 +584,12 @@ router.post('/refresh', async (req, res) => {
     session.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     await session.save();
 
-    const newAccessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: '5m', // Short-lived Access Token
-    });
+    // IP extraction for binding
+    const rawIp = req?.headers?.['x-forwarded-for'] || req?.ip || req?.connection?.remoteAddress || req?.socket?.remoteAddress || '127.0.0.1';
+    const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+    const ipHash = crypto.createHash('sha256').update(ipAddress).digest('hex');
+
+    const newAccessToken = generateAccessToken(user._id, ipHash, user.tokenVersion || 0);
 
     const cookieOptionsAccess = {
       expires: new Date(Date.now() + 5 * 60 * 1000),
@@ -619,34 +654,6 @@ router.post('/logout', async (req, res) => {
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
-// @desc    Developer Bypass Login (For local development only)
-// @route   POST /api/auth/dev-login
-// @access  Public
-router.post('/dev-login', async (req, res) => {
-  try {
-    const { email, role } = req.body;
-    let user = await User.findOne({ email });
-    
-    if (!user) {
-      // Create user if not exists
-      const enrollmentNo = email.split('@')[0].toUpperCase();
-      user = await User.create({
-        name: 'Dev User',
-        email,
-        enrollmentNo,
-        password: 'OAUTH_USER',
-        role: role || 'student',
-      });
-    } else if (role && user.role !== role) {
-      user.role = role;
-      await user.save();
-    }
 
-    await sendTokenCookie(user, 200, res, req);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Dev login failed' });
-  }
-});
 
 module.exports = router;

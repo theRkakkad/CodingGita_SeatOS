@@ -6,6 +6,7 @@ const Seat = require('../models/Seat');
 const Booking = require('../models/Booking');
 const Settings = require('../models/Settings');
 const LoginLog = require('../models/LoginLog');
+const ActionLog = require('../models/ActionLog');
 const { z } = require('zod');
 
 // --- Zod Validation Schemas ---
@@ -790,6 +791,18 @@ router.post('/bookings', async (req, res) => {
       }).catch(err => console.error('Error sending booking email:', err.message));
     }
 
+    const rawIp = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
+    const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+    
+    await ActionLog.create({
+      adminId: req.user._id,
+      adminName: req.user.name,
+      actionType: 'REASSIGN_SEAT',
+      targetId: studentId.toString(),
+      details: { seatNumber: seat.seatNumber, classroomId: seat.classroomId },
+      ipAddress
+    });
+
     res.status(201).json({ success: true, message: 'Seat successfully booked', booking });
   } catch (error) {
     console.error(error);
@@ -998,6 +1011,17 @@ router.post('/settings', async (req, res) => {
       io.emit('settings:update', updates);
     }
 
+    const rawIp = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
+    const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+    
+    await ActionLog.create({
+      adminId: req.user._id,
+      adminName: req.user.name,
+      actionType: 'UPDATE_SETTINGS',
+      details: updates,
+      ipAddress
+    });
+
     res.json({ success: true, message: 'Settings successfully updated', settings: updates });
   } catch (error) {
     console.error(error);
@@ -1077,6 +1101,39 @@ router.get('/login-logs', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error retrieving login logs' });
+  }
+});
+
+// @desc    Suspend user and instantly revoke all active sessions (Kill Switch)
+// @route   POST /api/master/suspend-user/:id
+// @access  Private (Admin)
+router.post('/suspend-user/:id', async (req, res) => {
+  try {
+    const targetUser = await User.findById(req.params.id);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Incrementing tokenVersion mathematically invalidates all previously issued JWTs instantly
+    targetUser.tokenVersion = (targetUser.tokenVersion || 0) + 1;
+    await targetUser.save();
+
+    const rawIp = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
+    const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+    
+    await ActionLog.create({
+      adminId: req.user._id,
+      adminName: req.user.name,
+      actionType: 'SUSPEND_USER',
+      targetId: targetUser._id.toString(),
+      details: { email: targetUser.email },
+      ipAddress
+    });
+
+    res.json({ success: true, message: `All active sessions for ${targetUser.email} have been instantly terminated.` });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Server error revoking sessions' });
   }
 });
 
