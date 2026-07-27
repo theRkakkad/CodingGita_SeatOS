@@ -11,13 +11,14 @@ if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' &&
 export const socket = io(socketURL, {
   autoConnect: false,
   transports: ['websocket'],
+  withCredentials: true,
 });
 
 // Helper function to connect socket
 export const connectSocket = () => {
   if (!socket.connected) {
-    const token = localStorage.getItem('token');
-    socket.auth = { token };
+    // Tokens are now stored in httpOnly cookies, which will be sent automatically
+    // due to withCredentials: true.
     socket.connect();
     console.log('Socket connection initiated');
   }

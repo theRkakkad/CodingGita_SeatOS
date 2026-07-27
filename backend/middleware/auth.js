@@ -43,11 +43,11 @@ const protect = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // IP Binding Check
+    // IP Binding Check (Downgraded to Logging)
     const ipHash = crypto.createHash('sha256').update(clientIp).digest('hex');
     if (decoded.ipHash && decoded.ipHash !== ipHash) {
-      console.warn(`[SECURITY ALERT] IP Binding Mismatch! Token stolen or IP changed | Expected: ${decoded.ipHash} | Got: ${ipHash}`);
-      return res.status(401).json({ success: false, message: 'Session IP mismatch. Please login again.' });
+      console.warn(`[SECURITY LOG] IP change detected for user ${decoded.id} | Expected Hash: ${decoded.ipHash} | New Hash: ${ipHash}`);
+      // Do NOT reject the request. Mobile/WiFi switches are normal.
     }
 
     // Get user from the token, exclude password

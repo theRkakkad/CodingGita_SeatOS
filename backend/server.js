@@ -107,8 +107,31 @@ const io = new Server(server, {
 app.set('io', io);
 
 // Socket.IO Room Connections
+const jwt = require('jsonwebtoken');
+
+// WebSocket Authentication Middleware
+io.use((socket, next) => {
+  const cookieStr = socket.request.headers.cookie || '';
+  const cookies = Object.fromEntries(cookieStr.split('; ').map(v => v.split('=').map(decodeURIComponent)));
+  
+  const token = cookies.accessToken;
+  if (!token) {
+    console.warn(`[SECURITY] Rejected unauthenticated socket connection: ${socket.id}`);
+    return next(new Error('Authentication error'));
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      console.warn(`[SECURITY] Rejected invalid socket token: ${socket.id}`);
+      return next(new Error('Authentication error'));
+    }
+    socket.user = decoded;
+    next();
+  });
+});
+
 io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
+  console.log(`Socket connected: ${socket.id} (User: ${socket.user.id})`);
 
   // Join Classroom Room
   socket.on('join:classroom', ({ classroomId }) => {
