@@ -12,7 +12,7 @@ function encrypt(text) {
   try {
     const iv = crypto.randomBytes(12); // GCM standard IV size
     const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(ENCRYPTION_KEY.substring(0, 64), 'hex'), iv);
-    let encrypted = cipher.update(text.toLowerCase());
+    let encrypted = cipher.update(text);
     encrypted = Buffer.concat([encrypted, cipher.final()]);
     const authTag = cipher.getAuthTag();
     // Format: ENC:<iv_hex>:<auth_tag_hex>:<ciphertext_hex>
@@ -61,6 +61,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please add an email'],
     trim: true,
+    lowercase: true,
     get: decrypt,
     set: encrypt
   },
