@@ -59,19 +59,20 @@ const googleSchema = z.object({
 });
 
 // Generate JWT Helper
-const generateAccessToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const generateAccessToken = (id, ipHash) => {
+  return jwt.sign({ id, ipHash }, process.env.JWT_SECRET, {
     expiresIn: '5m', // Short-lived Access Token
   });
 };
 
 const sendTokenCookie = async (user, statusCode, res, req) => {
-  const accessToken = generateAccessToken(user._id);
-  const refreshToken = crypto.randomBytes(40).toString('hex');
-  
   // IP & Geolocation info extraction
   const rawIp = req?.headers?.['x-forwarded-for'] || req?.ip || req?.connection?.remoteAddress || req?.socket?.remoteAddress || '127.0.0.1';
   const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+  const ipHash = crypto.createHash('sha256').update(ipAddress).digest('hex');
+
+  const accessToken = generateAccessToken(user._id, ipHash);
+  const refreshToken = crypto.randomBytes(40).toString('hex');
   const userAgent = req?.headers?.['user-agent'] || '';
   const geo = geoip.lookup(ipAddress);
   const location = {
@@ -552,9 +553,12 @@ router.post('/refresh', async (req, res) => {
     session.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     await session.save();
 
-    const newAccessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: '5m', // Short-lived Access Token
-    });
+    // IP extraction for binding
+    const rawIp = req?.headers?.['x-forwarded-for'] || req?.ip || req?.connection?.remoteAddress || req?.socket?.remoteAddress || '127.0.0.1';
+    const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+    const ipHash = crypto.createHash('sha256').update(ipAddress).digest('hex');
+
+    const newAccessToken = generateAccessToken(user._id, ipHash);
 
     const cookieOptionsAccess = {
       expires: new Date(Date.now() + 5 * 60 * 1000),

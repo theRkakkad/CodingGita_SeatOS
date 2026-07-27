@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const crypto = require('crypto');
 
 // Protect routes
 const protect = async (req, res, next) => {
@@ -41,6 +42,13 @@ const protect = async (req, res, next) => {
   try {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // IP Binding Check
+    const ipHash = crypto.createHash('sha256').update(clientIp).digest('hex');
+    if (decoded.ipHash && decoded.ipHash !== ipHash) {
+      console.warn(`[SECURITY ALERT] IP Binding Mismatch! Token stolen or IP changed | Expected: ${decoded.ipHash} | Got: ${ipHash}`);
+      return res.status(401).json({ success: false, message: 'Session IP mismatch. Please login again.' });
+    }
 
     // Get user from the token, exclude password
     req.user = await User.findById(decoded.id).select('-password');
