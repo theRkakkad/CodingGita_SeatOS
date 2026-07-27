@@ -1,11 +1,44 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+
+const ENCRYPTION_KEY = process.env.DB_ENCRYPTION_KEY || '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+
+function encrypt(text) {
+  if (!text) return text;
+  if (text.startsWith('ENC:')) return text;
+  try {
+    const iv = Buffer.from(ENCRYPTION_KEY.substring(0, 32), 'hex').slice(0, 16); 
+    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.substring(0, 64), 'hex'), iv);
+    let encrypted = cipher.update(text.toLowerCase()); // Lowercase for email consistency
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    return 'ENC:' + encrypted.toString('hex');
+  } catch(e) {
+    return text;
+  }
+}
+
+function decrypt(text) {
+  if (!text || !text.startsWith('ENC:')) return text;
+  try {
+    const iv = Buffer.from(ENCRYPTION_KEY.substring(0, 32), 'hex').slice(0, 16);
+    const encryptedText = Buffer.from(text.replace('ENC:', ''), 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.substring(0, 64), 'hex'), iv);
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString();
+  } catch(e) {
+    return text;
+  }
+}
 
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
     required: [true, 'Please add a name'],
     trim: true,
+    get: decrypt,
+    set: encrypt
   },
   enrollmentNo: {
     type: String,
@@ -18,11 +51,8 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Please add an email'],
     unique: true,
     trim: true,
-    lowercase: true,
-    match: [
-      /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
-      'Please add a valid email',
-    ],
+    get: decrypt,
+    set: encrypt
   },
   password: {
     type: String,
@@ -54,10 +84,12 @@ const userSchema = new mongoose.Schema({
   },
   tokenVersion: {
     type: Number,
-    default: 0,
-  },
+    default: 0
+  }
 }, {
   timestamps: true,
+  toJSON: { getters: true },
+  toObject: { getters: true }
 });
 
 // Encrypt password using bcryptjs
