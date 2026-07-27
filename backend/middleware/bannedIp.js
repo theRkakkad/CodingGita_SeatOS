@@ -7,11 +7,18 @@ const checkBannedIp = async (req, res, next) => {
   try {
     const isBanned = await BannedIP.findOne({ ipAddress });
     if (isBanned) {
-      console.warn(`[SECURITY ALERT] Blocked request from permanently banned IP: ${ipAddress}`);
-      // Drop connection immediately or return 403
+      const hoursBanned = (Date.now() - new Date(isBanned.bannedAt).getTime()) / (1000 * 60 * 60);
+      if (hoursBanned > 1) {
+        // Cooldown period expired, remove ban
+        await BannedIP.deleteOne({ _id: isBanned._id });
+        console.log(`[SECURITY] Removed expired IP ban for ${ipAddress}`);
+        return next();
+      }
+
+      console.warn(`[SECURITY ALERT] Blocked request from temporarily banned IP: ${ipAddress}`);
       return res.status(403).json({ 
         error: 'Access Denied.', 
-        message: 'Your IP address has been permanently blacklisted due to malicious activity.' 
+        message: 'Your IP address has been temporarily blacklisted due to malicious activity.' 
       });
     }
     next();

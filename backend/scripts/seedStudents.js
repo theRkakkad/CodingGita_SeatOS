@@ -2,9 +2,13 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env') });
+
+const LOOKUP_SECRET = process.env.LOOKUP_SECRET || 'fallback_lookup_secret_for_hmac_123';
+const getEmailHash = (email) => crypto.createHmac('sha256', LOOKUP_SECRET).update(email.toLowerCase()).digest('hex');
 
 const Classroom = require('../models/Classroom');
 const User = require('../models/User');
@@ -92,7 +96,7 @@ const seedStudents = async (shouldExit = false) => {
         classroomId = classroom2._id;
       }
 
-      let user = await User.findOne({ email: emailLower });
+      let user = await User.findOne({ emailLookupHash: getEmailHash(emailLower) });
       if (!user) {
         // Generate a new unique password
         let password = generateRandomPassword();

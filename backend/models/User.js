@@ -4,16 +4,21 @@ const crypto = require('crypto');
 
 const ENCRYPTION_KEY = process.env.DB_ENCRYPTION_KEY || '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 
+const LOOKUP_SECRET = process.env.LOOKUP_SECRET || 'fallback_lookup_secret_for_hmac_123';
+
 function encrypt(text) {
   if (!text) return text;
   if (text.startsWith('ENC:')) return text;
   try {
-    const iv = Buffer.from(ENCRYPTION_KEY.substring(0, 32), 'hex').slice(0, 16); 
-    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.substring(0, 64), 'hex'), iv);
-    let encrypted = cipher.update(text.toLowerCase()); // Lowercase for email consistency
+    const iv = crypto.randomBytes(12); // GCM standard IV size
+    const cipher = crypto.createCipheriv('aes-256-gcm', Buffer.from(ENCRYPTION_KEY.substring(0, 64), 'hex'), iv);
+    let encrypted = cipher.update(text.toLowerCase());
     encrypted = Buffer.concat([encrypted, cipher.final()]);
-    return 'ENC:' + encrypted.toString('hex');
+    const authTag = cipher.getAuthTag();
+    // Format: ENC:<iv_hex>:<auth_tag_hex>:<ciphertext_hex>
+    return `ENC:${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('hex')}`;
   } catch(e) {
+    console.error('Encryption error:', e);
     return text;
   }
 }
@@ -21,14 +26,20 @@ function encrypt(text) {
 function decrypt(text) {
   if (!text || !text.startsWith('ENC:')) return text;
   try {
-    const iv = Buffer.from(ENCRYPTION_KEY.substring(0, 32), 'hex').slice(0, 16);
-    const encryptedText = Buffer.from(text.replace('ENC:', ''), 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.substring(0, 64), 'hex'), iv);
+    const parts = text.split(':');
+    if (parts.length !== 4) return text;
+    const iv = Buffer.from(parts[1], 'hex');
+    const authTag = Buffer.from(parts[2], 'hex');
+    const encryptedText = Buffer.from(parts[3], 'hex');
+    
+    const decipher = crypto.createDecipheriv('aes-256-gcm', Buffer.from(ENCRYPTION_KEY.substring(0, 64), 'hex'), iv);
+    decipher.setAuthTag(authTag);
     let decrypted = decipher.update(encryptedText);
     decrypted = Buffer.concat([decrypted, decipher.final()]);
     return decrypted.toString();
   } catch(e) {
-    return text;
+    console.error('Decryption error:', e);
+    return text; // Fallback to raw text if decryption fails (or throw)
   }
 }
 
@@ -49,10 +60,14 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: [true, 'Please add an email'],
-    unique: true,
     trim: true,
     get: decrypt,
     set: encrypt
+  },
+  emailLookupHash: {
+    type: String,
+    unique: true,
+    sparse: true,
   },
   password: {
     type: String,
@@ -92,8 +107,15 @@ const userSchema = new mongoose.Schema({
   toObject: { getters: true }
 });
 
-// Encrypt password using bcryptjs
+// Pre-save hook
 userSchema.pre('save', async function (next) {
+  if (this.isModified('email') || this.isNew) {
+    if (this.email) {
+      this.emailLookupHash = crypto.createHmac('sha256', LOOKUP_SECRET)
+        .update(this.email.toLowerCase()).digest('hex');
+    }
+  }
+
   if (!this.isModified('password')) {
     return next();
   }
