@@ -7,6 +7,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
+const checkBannedIp = require('./middleware/bannedIp');
+const BannedIP = require('./models/BannedIP');
 
 // Load environment variables
 dotenv.config();
@@ -37,7 +39,15 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   crossOriginOpenerPolicy: false, // Completely disable to fix Google popup issues
   referrerPolicy: { policy: "no-referrer-when-downgrade" }, // Fixes Google SDK origin issues
-  contentSecurityPolicy: false, // We're using CORS instead of CSP for an API
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      scriptSrc: ["'none'"],
+      styleSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'none'"]
+    }
+  }, 
 }));
 
 // Cookie parser middleware
@@ -143,6 +153,24 @@ const loginLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+});
+
+// Global Banned IP Check Middleware
+app.use(checkBannedIp);
+
+// Active Defense (Honeypot Routes)
+app.all(['/wp-admin', '/.env', '/.git', '/api/admin/dump', '/phpmyadmin'], async (req, res) => {
+  const rawIp = req.headers['x-forwarded-for'] || req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress || '127.0.0.1';
+  const ipAddress = rawIp.includes(',') ? rawIp.split(',')[0].trim() : rawIp.trim();
+  
+  try {
+    await BannedIP.create({ ipAddress, reason: `Honeypot triggered on ${req.originalUrl}` });
+    console.warn(`[SECURITY ALERT] Honeypot triggered by ${ipAddress}. IP permanently banned.`);
+  } catch (err) {
+    // Ignore duplicate key errors if already banned
+  }
+  
+  return res.status(403).json({ error: 'Access Denied. Your IP address has been permanently blacklisted.' });
 });
 
 // Routes
