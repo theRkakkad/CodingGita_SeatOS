@@ -406,6 +406,7 @@ router.post('/google', async (req, res) => {
       user = await User.create({
         name,
         email,
+        emailLookupHash: getEmailHash(email),
         enrollmentNo,
         password: 'OAUTH_USER', // Dummy password since they use OAuth
         role: 'student',

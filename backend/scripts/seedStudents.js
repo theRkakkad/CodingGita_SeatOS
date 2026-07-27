@@ -37,7 +37,7 @@ const generateRandomPassword = () => {
 
 const seedStudents = async (shouldExit = false) => {
   try {
-    const jsonPath = path.join(__dirname, '../studentsdata.json.json');
+    const jsonPath = path.join(__dirname, '../studentsdata.json');
 
     if (!fs.existsSync(jsonPath)) {
       console.error(`Error: real student data file not found at ${jsonPath}`);
@@ -47,7 +47,7 @@ const seedStudents = async (shouldExit = false) => {
 
     // Read students from file
     const students = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-    console.log(`Loaded ${students.length} students from studentsdata.json.json.`);
+    console.log(`Loaded ${students.length} students from studentsdata.json.`);
 
     // 2. Connect to Database
     if (mongoose.connection.readyState === 0) {
@@ -56,9 +56,9 @@ const seedStudents = async (shouldExit = false) => {
     console.log('Connected to MongoDB database...');
 
     // Extract all real emails to clean up dummy accounts
-    const realEmails = students
-      .filter(s => s["EMAIL ID"])
-      .map(s => s["EMAIL ID"].trim().toLowerCase());
+      const realEmails = students
+        .filter(s => s["Email Address [Required]"])
+        .map(s => s["Email Address [Required]"].trim().toLowerCase());
 
     // Clean up only dummy student accounts (whose emails are not in the real file)
     console.log('Cleaning up obsolete dummy student accounts...');
@@ -83,7 +83,7 @@ const seedStudents = async (shouldExit = false) => {
     let updatedCount = 0;
 
     for (const student of students) {
-      const email = student["EMAIL ID"];
+      const email = student["Email Address [Required]"];
       if (!email) continue;
 
       const emailLower = email.trim().toLowerCase();
@@ -107,12 +107,19 @@ const seedStudents = async (shouldExit = false) => {
         }
 
         // Create new student with unique password
+        // Convert name to Title Case
+        const formattedName = (student.Name ? student.Name.trim() : 'Unknown Student')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+          
         await User.create({
-          name: student.NAME ? student.NAME.trim() : 'Unknown Student',
+          name: formattedName,
           email: emailLower,
+          emailLookupHash: getEmailHash(emailLower),
           password: password, // automatic pre-save hash
           plainPassword: password, // Store plain text for admin view!
-          enrollmentNo: student.GR ? String(student.GR).trim() : `EN_${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+          enrollmentNo: emailLower.split('@')[0].toUpperCase(), // Extract from email
           assignedClassroom: classroomId,
           dob: student.DOB ? String(student.DOB).trim() : null,
           role: 'student',
@@ -126,7 +133,7 @@ const seedStudents = async (shouldExit = false) => {
         const emailHtml = `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #fafbfc;">
             <h2 style="color: #4e55fa; margin-top: 0;">Welcome to CodingGita SeatSync!</h2>
-            <p>Hello <strong>${student.NAME}</strong>,</p>
+            <p>Hello <strong>${student.Name || 'Student'}</strong>,</p>
             <p>Your student account has been created successfully for the classroom seat booking portal.</p>
             <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 15px 0;">
               <p style="margin: 0 0 8px 0;"><strong>Access Details:</strong></p>
