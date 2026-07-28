@@ -24,7 +24,7 @@ function encrypt(text) {
 }
 
 function decrypt(text) {
-  if (!text || !text.startsWith('ENC:')) return text;
+  if (!text || (!text.startsWith('ENC:') && !text.startsWith('enc:'))) return text;
   try {
     const parts = text.split(':');
     if (parts.length !== 4) return text;
@@ -61,7 +61,6 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please add an email'],
     trim: true,
-    lowercase: true,
     get: decrypt,
     set: encrypt
   },
