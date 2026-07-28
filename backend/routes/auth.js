@@ -187,6 +187,8 @@ const sendTokenCookie = async (user, statusCode, res, req) => {
   if (process.env.NODE_ENV === 'production') {
     cookieOptionsAccess.secure = true;
     cookieOptionsRefresh.secure = true;
+    cookieOptionsAccess.sameSite = 'none';
+    cookieOptionsRefresh.sameSite = 'none';
   }
 
   // Generate CSRF Token for Double Submit Cookie pattern
@@ -196,7 +198,7 @@ const sendTokenCookie = async (user, statusCode, res, req) => {
     .status(statusCode)
     .cookie('accessToken', accessToken, cookieOptionsAccess)
     .cookie('refreshToken', refreshToken, cookieOptionsRefresh)
-    .cookie('csrfToken', csrfToken, { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' })
+    .cookie('csrfToken', csrfToken, { sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' })
     .json({
       success: true,
       csrfToken,
@@ -548,9 +550,9 @@ router.post('/refresh', async (req, res) => {
     });
 
     if (!session) {
-      res.clearCookie('accessToken');
-      res.clearCookie('refreshToken');
-      res.clearCookie('csrfToken');
+      res.clearCookie('accessToken', { httpOnly: true, sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
+      res.clearCookie('refreshToken', { httpOnly: true, sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
+      res.clearCookie('csrfToken', { sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
       return res.status(401).json({ success: false, message: 'Invalid refresh token' });
     }
 
@@ -559,9 +561,9 @@ router.post('/refresh', async (req, res) => {
       console.warn(`[SECURITY ALERT] Token reuse detected for User ${session.userId}. Revoking session.`);
       session.isRevoked = true;
       await session.save();
-      res.clearCookie('accessToken');
-      res.clearCookie('refreshToken');
-      res.clearCookie('csrfToken');
+      res.clearCookie('accessToken', { httpOnly: true, sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
+      res.clearCookie('refreshToken', { httpOnly: true, sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
+      res.clearCookie('csrfToken', { sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
       return res.status(401).json({ success: false, message: 'Token reuse detected. Session revoked.' });
     }
 
@@ -569,9 +571,9 @@ router.post('/refresh', async (req, res) => {
     if (session.isRevoked || session.expiresAt < new Date()) {
       session.isRevoked = true;
       await session.save();
-      res.clearCookie('accessToken');
-      res.clearCookie('refreshToken');
-      res.clearCookie('csrfToken');
+      res.clearCookie('accessToken', { httpOnly: true, sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
+      res.clearCookie('refreshToken', { httpOnly: true, sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
+      res.clearCookie('csrfToken', { sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
       return res.status(401).json({ success: false, message: 'Session expired or invalid' });
     }
 
@@ -597,13 +599,13 @@ router.post('/refresh', async (req, res) => {
     const cookieOptionsAccess = {
       expires: new Date(Date.now() + 5 * 60 * 1000),
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       secure: process.env.NODE_ENV === 'production'
     };
     const cookieOptionsRefresh = {
       expires: session.expiresAt,
       httpOnly: true,
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       secure: process.env.NODE_ENV === 'production'
     };
     
@@ -613,7 +615,7 @@ router.post('/refresh', async (req, res) => {
       .status(200)
       .cookie('accessToken', newAccessToken, cookieOptionsAccess)
       .cookie('refreshToken', newRefreshToken, cookieOptionsRefresh)
-      .cookie('csrfToken', csrfToken, { sameSite: 'lax', secure: process.env.NODE_ENV === 'production' })
+      .cookie('csrfToken', csrfToken, { sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' })
       .json({ success: true, csrfToken });
   } catch (error) {
     console.error(error);
@@ -651,9 +653,14 @@ router.post('/logout', async (req, res) => {
     }
   } catch(e) {}
   
-  res.clearCookie('accessToken');
-  res.clearCookie('refreshToken');
-  res.clearCookie('csrfToken');
+  const cookieOptions = {
+    httpOnly: true,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: process.env.NODE_ENV === 'production'
+  };
+  res.clearCookie('accessToken', cookieOptions);
+  res.clearCookie('refreshToken', cookieOptions);
+  res.clearCookie('csrfToken', { sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', secure: process.env.NODE_ENV === 'production' });
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
