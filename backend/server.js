@@ -9,6 +9,7 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const checkBannedIp = require('./middleware/bannedIp');
 const BannedIP = require('./models/BannedIP');
+const mongoSanitize = require('express-mongo-sanitize');
 
 // Load environment variables
 dotenv.config();
@@ -100,6 +101,9 @@ app.use(cors({
 
 // Body parser
 app.use(express.json());
+
+// Prevent NoSQL Injection attacks by sanitizing all inputs (req.body, req.query, req.params)
+app.use(mongoSanitize());
 
 // Socket.IO Setup
 const io = new Server(server, {
