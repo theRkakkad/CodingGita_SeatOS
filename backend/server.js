@@ -13,6 +13,14 @@ const BannedIP = require('./models/BannedIP');
 // Load environment variables
 dotenv.config();
 
+// Weakness 4 Mitigation: Prevent weak JWT secrets in production
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'supersecretjwtkeyforseatsyncbookingapp123!' || process.env.JWT_SECRET.length < 32) {
+    console.error('CRITICAL SECURITY ERROR: You must set a strong, unique JWT_SECRET (at least 32 characters) in production!');
+    process.exit(1);
+  }
+}
+
 // Connect to MongoDB & Verify/Seed Database configurations
 connectDB().then(async () => {
   try {
