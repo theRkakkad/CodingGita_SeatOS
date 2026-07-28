@@ -5,7 +5,17 @@ const Booking = require('../models/Booking');
 const Settings = require('../models/Settings');
 const { protect } = require('../middleware/auth');
 const haversine = require('haversine-distance');
+const Classroom = require('../models/Classroom');
+const sendEmail = require('../utils/sendEmail');
 const { z } = require('zod');
+const rateLimit = require('express-rate-limit');
+
+// Strict rate limiter specifically for booking attempts
+const bookingLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 3, // Limit each IP to 3 booking attempts per 5 minutes
+  message: { success: false, message: 'Too many booking attempts. Please try again after 5 minutes to prevent spam.' }
+});
 
 // Booking Validation Schema
 const bookSeatSchema = z.object({
@@ -58,7 +68,7 @@ router.get('/booking-status', async (req, res) => {
 // @desc    Book a classroom seat
 // @route   POST /api/seats/book
 // @access  Private (Student)
-router.post('/book', protect, checkBookingOpen, async (req, res) => {
+router.post('/book', protect, checkBookingOpen, bookingLimiter, async (req, res) => {
   const parsed = bookSeatSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
@@ -157,6 +167,39 @@ router.post('/book', protect, checkBookingOpen, async (req, res) => {
       io.emit('classroom:update');
     }
 
+    // 5. Send Email Notification
+    try {
+      const classroom = await Classroom.findById(seat.classroomId);
+      const className = classroom ? classroom.name : 'your classroom';
+      const emailSubject = `Seat ${seat.seatNumber} Booked Successfully`;
+      const emailText = `Hello ${req.user.name},\n\nYou have successfully booked Seat ${seat.seatNumber} in ${className}.\n\nBooking Details:\n- Seat Number: ${seat.seatNumber}\n- Classroom: ${className}\n- Enrollment No: ${req.user.enrollmentNo}\n\nThank you,\nCodingGita SeatSync Admin`;
+      
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #fafbfc;">
+          <h2 style="color: #10b981; margin-top: 0;">Seat Booked Successfully!</h2>
+          <p>Hello <strong>${req.user.name}</strong>,</p>
+          <p>Your seat booking is confirmed.</p>
+          <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 15px 0;">
+            <p style="margin: 0 0 6px 0;">💺 <strong>Seat Number:</strong> ${seat.seatNumber}</p>
+            <p style="margin: 0 0 6px 0;">🏫 <strong>Classroom:</strong> ${className}</p>
+            <p style="margin: 0;">🎓 <strong>Enrollment No:</strong> ${req.user.enrollmentNo}</p>
+          </div>
+          <p style="font-size: 12px; color: #718096; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+            This is an automated message from CodingGita SeatSync.
+          </p>
+        </div>
+      `;
+
+      await sendEmail({
+        email: req.user.email,
+        subject: emailSubject,
+        message: emailText,
+        html: emailHtml
+      });
+    } catch (emailError) {
+      console.error('Failed to send booking confirmation email:', emailError);
+    }
+
     res.status(201).json({
       success: true,
       message: `Seat ${seat.seatNumber} successfully booked`,
@@ -201,7 +244,39 @@ router.delete('/cancel', protect, checkBookingOpen, async (req, res) => {
       io.emit('classroom:update');
     }
 
-    res.json({ success: true, message: 'Booking successfully cancelled' });
+    // 5. Send Email Notification
+    try {
+      const classroom = await Classroom.findById(booking.classroomId);
+      const className = classroom ? classroom.name : 'your classroom';
+      const emailSubject = `Seat ${booking.seatNumber} Booking Cancelled`;
+      const emailText = `Hello ${req.user.name},\n\nYour booking for Seat ${booking.seatNumber} in ${className} has been successfully cancelled.\n\nThank you,\nCodingGita SeatSync Admin`;
+      
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #fafbfc;">
+          <h2 style="color: #ef4444; margin-top: 0;">Seat Booking Cancelled</h2>
+          <p>Hello <strong>${req.user.name}</strong>,</p>
+          <p>Your seat booking has been cancelled.</p>
+          <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 15px 0;">
+            <p style="margin: 0 0 6px 0;">💺 <strong>Seat Number:</strong> ${booking.seatNumber}</p>
+            <p style="margin: 0;">🏫 <strong>Classroom:</strong> ${className}</p>
+          </div>
+          <p style="font-size: 12px; color: #718096; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+            This is an automated message from CodingGita SeatSync.
+          </p>
+        </div>
+      `;
+
+      await sendEmail({
+        email: req.user.email,
+        subject: emailSubject,
+        message: emailText,
+        html: emailHtml
+      });
+    } catch (emailError) {
+      console.error('Failed to send cancellation email:', emailError);
+    }
+
+    res.json({ success: true, message: 'Booking cancelled successfully' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error cancelling booking' });

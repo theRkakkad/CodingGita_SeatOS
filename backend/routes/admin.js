@@ -52,20 +52,20 @@ const generateRandomPassword = () => {
 };
 
 const getGodLevelEmailTemplate = (student, classroom, seat, type = 'booking') => {
-  const portalUrl = 'https://seat-booking-website-flax.vercel.app/login';
+  const loginUrl = 'https://seat-booking-website-flax.vercel.app/login';
   
   let headerColor = '#10b981';
   let headerTitle = 'Seat Booking Confirmed!';
-  let actionText = 'An administrator has successfully booked a seat for you on the portal.';
+  let actionText = 'An administrator has successfully booked a seat for you.';
   
   if (type === 'reassign') {
-    headerColor = '#f9ca3a';
-    headerTitle = 'Seat Reassigned to You!';
-    actionText = 'An administrator has successfully reassigned a seat to you on the portal.';
+    headerColor = '#f59e0b';
+    headerTitle = 'Seat Reassigned!';
+    actionText = 'An administrator has successfully reassigned a seat to you.';
   } else if (type === 'cancel') {
     headerColor = '#ef4444';
     headerTitle = 'Seat Booking Failed (Network Error)';
-    actionText = 'Your seat booking was not completed due to a temporary network issue on the portal.';
+    actionText = 'Your seat booking was not completed due to a temporary network issue.';
   }
 
   const showCredentials = type !== 'cancel' && student.email;
@@ -78,187 +78,58 @@ const getGodLevelEmailTemplate = (student, classroom, seat, type = 'booking') =>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${headerTitle}</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      background-color: #0b071a;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      color: #e2e8f0;
-    }
-    .wrapper {
-      width: 100%;
-      background-color: #0b071a;
-      padding: 40px 0;
-    }
-    .main-card {
-      max-width: 540px;
-      margin: 0 auto;
-      background: linear-gradient(180deg, #130a2a 0%, #1a0f3c 100%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 24px;
-      overflow: hidden;
-    }
-    .glow-bar {
-      height: 5px;
-      background: linear-gradient(90deg, #7c3aed, #f9ca3a, #7c3aed);
-    }
-    .header {
-      padding: 35px 35px 15px 35px;
-      text-align: center;
-    }
-    .logo {
-      height: 40px;
-      margin-bottom: 20px;
-    }
-    .title {
-      font-size: 24px;
-      font-weight: 800;
-      margin: 10px 0 5px 0;
-    }
-    .content {
-      padding: 0 35px 35px 35px;
-    }
-    .greeting {
-      font-size: 15px;
-      color: #e2e8f0;
-      margin-bottom: 15px;
-      line-height: 1.6;
-    }
-    .details-box {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      border-radius: 16px;
-      padding: 20px;
-      margin-bottom: 25px;
-    }
-    .detail-row {
-      display: block;
-      padding: 10px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    .detail-row:last-child {
-      border-bottom: none;
-      padding-bottom: 0;
-    }
-    .detail-row:first-child {
-      padding-top: 0;
-    }
-    .detail-label {
-      font-size: 11px;
-      color: #a78bfa;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      display: inline-block;
-      width: 120px;
-    }
-    .detail-value {
-      font-size: 14px;
-      color: #ffffff;
-      font-weight: 700;
-      display: inline-block;
-    }
-    .credentials-box {
-      background: linear-gradient(135deg, rgba(124, 58, 237, 0.12) 0%, rgba(249, 202, 58, 0.04) 100%);
-      border: 1px solid rgba(124, 58, 237, 0.2);
-      border-radius: 16px;
-      padding: 20px;
-      margin-bottom: 25px;
-    }
-    .credentials-title {
-      font-size: 13px;
-      color: #f9ca3a;
-      font-weight: 800;
-      margin-bottom: 12px;
-      letter-spacing: 0.5px;
-    }
-    .credential-item {
-      font-size: 13px;
-      color: #e2e8f0;
-      margin: 8px 0;
-    }
-    .credential-code {
-      font-family: monospace;
-      background: rgba(0, 0, 0, 0.3);
-      padding: 3px 6px;
-      border-radius: 4px;
-      color: #ffffff;
-      font-weight: bold;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-    .btn-container {
-      text-align: center;
-      margin: 25px 0 10px 0;
-    }
-    .action-btn {
-      display: inline-block;
-      padding: 14px 30px;
-      background: linear-gradient(90deg, #7c3aed, #6d28d9);
-      border-radius: 12px;
-      color: #ffffff !important;
-      font-size: 14px;
-      font-weight: 700;
-      text-decoration: none;
-    }
-    .footer {
-      text-align: center;
-      margin-top: 30px;
-      font-size: 11px;
-      color: #64748b;
-    }
-  </style>
 </head>
-<body>
-  <div class="wrapper">
-    <div class="main-card">
-      <div class="glow-bar"></div>
-      <div class="header">
-        <h2 class="title" style="color: ${headerColor};">${headerTitle}</h2>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1f2937;">
+  <div style="width: 100%; padding: 40px 0;">
+    <div style="max-width: 540px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+      <div style="height: 5px; background: ${headerColor};"></div>
+      
+      <div style="padding: 35px 35px 15px 35px; text-align: center;">
+        <h2 style="font-size: 24px; font-weight: 800; margin: 10px 0 5px 0; color: ${headerColor};">${headerTitle}</h2>
       </div>
-      <div class="content">
-        <p class="greeting">Hello <strong>${student.name}</strong>,</p>
-        <p class="greeting" style="color: #94a3b8; font-size: 13px; margin-bottom: 20px;">${actionText}</p>
+      
+      <div style="padding: 0 35px 35px 35px;">
+        <p style="font-size: 16px; color: #1f2937; margin-bottom: 15px; line-height: 1.6;">Hello <strong>${student.name}</strong>,</p>
+        <p style="font-size: 15px; color: #4b5563; margin-bottom: 25px; line-height: 1.6;">${actionText}</p>
         
-        <div class="details-box">
-          <div class="detail-row">
-            <span class="detail-label">Classroom:</span>
-            <span class="detail-value">${classroom ? classroom.name : 'N/A'}</span>
+        <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-bottom: 25px;">
+          <div style="display: block; padding: 10px 0; border-bottom: 1px solid #e5e7eb; padding-top: 0;">
+            <span style="font-size: 12px; color: #6b7280; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; width: 120px;">Classroom:</span>
+            <span style="font-size: 15px; color: #111827; font-weight: 600; display: inline-block;">${classroom ? classroom.name : 'N/A'}</span>
           </div>
-          <div class="detail-row">
-            <span class="detail-label">Seat Number:</span>
-            <span class="detail-value" style="color: #f9ca3a;">${seat ? seat.seatNumber : 'N/A'}</span>
+          <div style="display: block; padding: 10px 0; border-bottom: 1px solid #e5e7eb;">
+            <span style="font-size: 12px; color: #6b7280; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; width: 120px;">Seat Number:</span>
+            <span style="font-size: 15px; color: #111827; font-weight: 700; display: inline-block;">${seat ? seat.seatNumber : 'N/A'}</span>
           </div>
-          <div class="detail-row">
-            <span class="detail-label">Enrollment:</span>
-            <span class="detail-value">${student.enrollmentNo || 'N/A'}</span>
+          <div style="display: block; padding: 10px 0; border-bottom: none; padding-bottom: 0;">
+            <span style="font-size: 12px; color: #6b7280; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; display: inline-block; width: 120px;">Enrollment:</span>
+            <span style="font-size: 15px; color: #111827; font-weight: 600; display: inline-block;">${student.enrollmentNo || 'N/A'}</span>
           </div>
         </div>
 
         ${showCredentials ? `
-        <div class="credentials-box">
-          <div class="credentials-title">🔐 PORTAL LOGIN CREDENTIALS</div>
-          <div class="credential-item">
-            <strong>Email:</strong> <span class="credential-code">${student.email}</span>
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin-bottom: 25px;">
+          <div style="font-size: 13px; color: #166534; font-weight: 800; margin-bottom: 12px; letter-spacing: 0.5px;">🔐 LOGIN CREDENTIALS</div>
+          <div style="font-size: 14px; color: #1f2937; margin: 8px 0;">
+            <strong>Email:</strong> <span style="font-family: monospace; background: #ffffff; padding: 3px 6px; border-radius: 4px; color: #111827; font-weight: bold; border: 1px solid #d1d5db;">${student.email}</span>
           </div>
-          <div class="credential-item">
-            <strong>Password:</strong> <span class="credential-code">${tempPassword}</span>
+          <div style="font-size: 14px; color: #1f2937; margin: 8px 0;">
+            <strong>Password:</strong> <span style="font-family: monospace; background: #ffffff; padding: 3px 6px; border-radius: 4px; color: #111827; font-weight: bold; border: 1px solid #d1d5db;">${tempPassword}</span>
           </div>
-          <p style="font-size: 11px; color: #a78bfa; margin: 10px 0 0 0; line-height: 1.4;">
-            * Use these credentials to access your Student Portal dashboard.
+          <p style="font-size: 12px; color: #166534; margin: 10px 0 0 0; line-height: 1.4;">
+            * Use these credentials to sign in.
           </p>
         </div>
         ` : ''}
 
-        <div class="btn-container">
-          <a class="action-btn" href="${portalUrl}" target="_blank">Access SeatSync Portal</a>
-        </div>
-
-        <div class="footer">
-          <p>This is an automated notification from SeatSync.</p>
-          <p>&copy; ${new Date().getFullYear()} CodingGita. All rights reserved.</p>
+        <div style="text-align: center; margin: 30px 0 10px 0;">
+          <a href="${loginUrl}" style="display: inline-block; padding: 14px 30px; background: #10b981; border-radius: 10px; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none;">Access SeatSync</a>
         </div>
       </div>
+    </div>
+    
+    <div style="text-align: center; margin-top: 30px; font-size: 12px; color: #6b7280;">
+      © ${new Date().getFullYear()} CodingGita SeatSync. All rights reserved.
     </div>
   </div>
 </body>
