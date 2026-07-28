@@ -8,6 +8,14 @@ const haversine = require('haversine-distance');
 const Classroom = require('../models/Classroom');
 const sendEmail = require('../utils/sendEmail');
 const { z } = require('zod');
+const rateLimit = require('express-rate-limit');
+
+// Strict rate limiter specifically for booking attempts
+const bookingLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 3, // Limit each IP to 3 booking attempts per 5 minutes
+  message: { success: false, message: 'Too many booking attempts. Please try again after 5 minutes to prevent spam.' }
+});
 
 // Booking Validation Schema
 const bookSeatSchema = z.object({
@@ -60,7 +68,7 @@ router.get('/booking-status', async (req, res) => {
 // @desc    Book a classroom seat
 // @route   POST /api/seats/book
 // @access  Private (Student)
-router.post('/book', protect, checkBookingOpen, async (req, res) => {
+router.post('/book', protect, checkBookingOpen, bookingLimiter, async (req, res) => {
   const parsed = bookSeatSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, message: parsed.error.issues[0].message });
