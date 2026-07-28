@@ -108,7 +108,7 @@ const StudentInfoBookings = () => {
                       </td>
                       <td style={tdStyle}>
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold"
-                          style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5', whiteSpace: 'nowrap' }}>
+                          style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e', whiteSpace: 'nowrap' }}>
                           <Armchair className="w-3.5 h-3.5" />Seat {booking.seatNumber}
                         </span>
                       </td>

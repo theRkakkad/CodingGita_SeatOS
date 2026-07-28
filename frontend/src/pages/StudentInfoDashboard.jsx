@@ -123,7 +123,7 @@ const StudentInfoDashboard = () => {
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold"
                               style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e', whiteSpace: 'nowrap' }}>
                               <Armchair className="w-3.5 h-3.5" />
-                              Booked
+                              Seat {student.booking.seatNumber}
                             </span>
                           )
                         ) : (
