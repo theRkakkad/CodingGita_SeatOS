@@ -70,12 +70,10 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many login attempts from this IP, please try again after a minute' }
 });
 
-// Allowed frontend origins
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'https://seat-booking-website-flax.vercel.app',
-];
+// Allowed frontend origins (configurable via .env, defaults to production only)
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['https://seat-booking-website-flax.vercel.app'];
 
 // Enable CORS
 app.use(cors({
